@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ username }} - Alpha Vantage Trading{% endblock %}
+
+{% block content %}
+<!-- Dashboard Header -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="h3 mb-2">
+            <i class="fas fa-tachometer-alt me-2 text-primary"></i>
+            Hoş geldiniz, {{ username }}!
+        </h1>
+        <p class="text-muted mb-0">
+            <i class="fas fa-clock me-1"></i>
+            Son güncelleme: <span id="last-update">-</span>
+            <span class="ms-3">
+                <span class="badge bg-secondary" id="refresh-status">Manuel Mod</span>
+            </span>
+        </p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <div class="row g-2">
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="refresh-interval">
+                    <option value="0">Manuel</option>
+                    <option value="30">30 saniye</option>
+                    <option value="60">1 dakika</option>
+                    <option value="120">2 dakika</option>
+                    <option value="300">5 dakika</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-success" id="start-auto-refresh" style="display: none;">
+                        <i class="fas fa-play me-1"></i>Başlat
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="stop-auto-refresh" style="display: none;">
+                        <i class="fas fa-stop me-1"></i>Durdur
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="refresh-data">
+                        <i class="fas fa-sync-alt me-1"></i>Yenile
+                    </button>
+                    <a href="{{ url_for('manage_watchlist') }}" class="btn btn-primary">
+                        <i class="fas fa-heart me-1"></i>Watchlist
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Watchlist Status -->
+{% if user_watchlist.forex or user_watchlist.stocks or user_watchlist.crypto %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Watchlist:</strong>
+            {{ user_watchlist.forex|length }} Forex,
+            {{ user_watchlist.stocks|length }} Hisse,
+            {{ user_watchlist.crypto|length }} Crypto takip ediliyor.
+            <a href="{{ url_for('manage_watchlist') }}" class="alert-link">Düzenle</a>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Watchlist boş!</strong>
+            İlgilendiğiniz varlıkları seçmek için watchlist oluşturun.
+            <a href="{{ url_for('manage_watchlist') }}" class="alert-link">Watchlist Oluştur</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Live Data Display -->
+<div id="live-data-container">
+    <!-- Forex Section -->
+    {% if user_watchlist.forex %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2 text-primary"></i>
+                        Forex Pairs
+                        <span class="badge bg-primary">{{ user_watchlist.forex|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="forex-data">
+                        <!-- Forex data will be loaded here -->
+                        <div class="col-12 text-center py-4">
+                            <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                            <p class="mt-2 text-muted">Forex verileri yükleniyor...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stocks Section -->
+    {% if user_watchlist.stocks %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2 text-success"></i>
+                        US Stocks
+                        <span class="badge bg-success">{{ user_watchlist.stocks|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="stocks-data">
+                        <!-- Stocks data will be loaded here -->
+                        <div class="col-12 text-center py-4">
+                            <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                            <p class="mt-2 text-muted">Hisse verileri yükleniyor...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Crypto Section -->
+    {% if user_watchlist.crypto %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fab fa-bitcoin me-2 text-warning"></i>
+                        Cryptocurrencies
+                        <span class="badge bg-warning">{{ user_watchlist.crypto|length }}</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row" id="crypto-data">
+                        <!-- Crypto data will be loaded here -->
+                        <div class="col-12 text-center py-4">
+                            <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                            <p class="mt-2 text-muted">Crypto verileri yükleniyor...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- News Modal -->
+<div class="modal fade" id="newsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-newspaper me-2"></i>
+                    <span id="modal-symbol">-</span> Haberleri
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="news-content">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                    <p class="mt-2 text-muted">Haberler yükleniyor...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let refreshInterval;
+let isAutoRefreshActive = false;
+
+// Load live data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadLiveData();
+    
+    // Refresh button
+    document.getElementById('refresh-data').addEventListener('click', function() {
+        loadLiveData();
+    });
+    
+    // Refresh interval selector
+    document.getElementById('refresh-interval').addEventListener('change', function() {
+        const value = parseInt(this.value);
+        
+        if (value === 0) {
+            // Manuel mode
+            stopAutoRefresh();
+            document.getElementById('start-auto-refresh').style.display = 'none';
+            document.getElementById('stop-auto-refresh').style.display = 'none';
+        } else {
+            // Auto refresh mode - stop current if running
+            if (isAutoRefreshActive) {
+                stopAutoRefresh();
+            }
+            document.getElementById('start-auto-refresh').style.display = 'inline-block';
+        }
+    });
+    
+    // Start auto refresh
+    document.getElementById('start-auto-refresh').addEventListener('click', function() {
+        const interval = parseInt(document.getElementById('refresh-interval').value);
+        if (interval > 0) {
+            startAutoRefresh(interval);
+        }
+    });
+    
+    // Stop auto refresh
+    document.getElementById('stop-auto-refresh').addEventListener('click', function() {
+        stopAutoRefresh();
+    });
+});
+
+// Load live data from API
+async function loadLiveData() {
+    try {
+        showLoading(document.getElementById('live-data-container'));
+        
+        const response = await fetch('/api/live-data');
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Update each section
+        updateForexData(data.forex || []);
+        updateStocksData(data.stocks || []);
+        updateCryptoData(data.crypto || []);
+        
+        // Update timestamp
+        document.getElementById('last-update').textContent = new Date().toLocaleTimeString('tr-TR');
+        
+        hideLoading(document.getElementById('live-data-container'));
+        
+    } catch (error) {
+        console.error('Live data error:', error);
+        showError('Veri yüklenirken hata oluştu: ' + error.message);
+        hideLoading(document.getElementById('live-data-container'));
+    }
+}
+
+// Update Forex data
+function updateForexData(forexData) {
+    const container = document.getElementById('forex-data');
+    if (!container) return;
+    
+    if (forexData.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center py-4"><p class="text-muted">Forex verisi bulunamadı</p></div>';
+        return;
+    }
+    
+    let html = '';
+    forexData.forEach(item => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card price-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-title mb-0">${item.symbol}</h6>
+                            <small class="text-muted">
+                                <i class="fas fa-chart-line me-1"></i>Teknik Analiz
+                            </small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="h5 mb-0">${formatPrice(item.price, item.symbol)}</span>
+                            <span>${formatSignal(item.signal)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// Update Stocks data
+function updateStocksData(stocksData) {
+    const container = document.getElementById('stocks-data');
+    if (!container) return;
+    
+    if (stocksData.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center py-4"><p class="text-muted">Hisse verisi bulunamadı</p></div>';
+        return;
+    }
+    
+    let html = '';
+    stocksData.forEach(item => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card price-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-title mb-0">${item.symbol}</h6>
+                            <button class="btn btn-sm btn-outline-success" onclick="showNews('${item.symbol}')" title="Haberler & Sentiment">
+                                <i class="fas fa-newspaper me-1"></i>Haberler
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="h5 mb-0">${formatPrice(item.price, item.symbol)}</span>
+                            <span>${formatSignal(item.signal)}</span>
+                        </div>
+                        ${item.sentiment !== null ? `
+                            <div class="mt-2">
+                                <small class="text-muted">Sentiment:</small>
+                                ${formatSentiment(item.sentiment)}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// Update Crypto data
+function updateCryptoData(cryptoData) {
+    const container = document.getElementById('crypto-data');
+    if (!container) return;
+    
+    if (cryptoData.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center py-4"><p class="text-muted">Crypto verisi bulunamadı</p></div>';
+        return;
+    }
+    
+    let html = '';
+    cryptoData.forEach(item => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card price-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-title mb-0">${item.symbol}</h6>
+                            <small class="text-muted">
+                                <i class="fas fa-chart-bar me-1"></i>Teknik Analiz
+                            </small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="h5 mb-0">${formatPrice(item.price, item.symbol)}</span>
+                            <span>${formatSignal(item.signal)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// Show news modal
+async function showNews(symbol) {
+    const modal = new bootstrap.Modal(document.getElementById('newsModal'));
+    document.getElementById('modal-symbol').textContent = symbol;
+    document.getElementById('news-content').innerHTML = `
+        <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+            <p class="mt-2 text-muted">Haberler yükleniyor...</p>
+        </div>`;
+    
+    modal.show();
+    
+    try {
+        const response = await fetch(`/api/news/${symbol}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        let html = `
+            <div class="mb-3">
+                <h6>Genel Sentiment: ${formatSentiment(data.overall_sentiment)}</h6>
+                <p class="text-muted">Toplam ${data.news_count} haber analiz edildi</p>
+            </div>`;
+        
+        if (data.top_news && data.top_news.length > 0) {
+            html += '<h6>Son Haberler:</h6>';
+            data.top_news.forEach(news => {
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <h6 class="card-title h6">${news.title}</h6>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">${new Date(news.time_published).toLocaleDateString('tr-TR')}</small>
+                                <small>Sentiment: ${formatSentiment(news.overall_sentiment_score)}</small>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+        } else {
+            html += '<p class="text-muted">Bu sembol için haber bulunamadı.</p>';
+        }
+        
+        document.getElementById('news-content').innerHTML = html;
+        
+    } catch (error) {
+        document.getElementById('news-content').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Haberler yüklenirken hata: ${error.message}
+            </div>`;
+    }
+}
+
+// Auto refresh with custom interval
+function startAutoRefresh(intervalSeconds = 60) {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    isAutoRefreshActive = true;
+    
+    refreshInterval = setInterval(() => {
+        loadLiveData();
+    }, intervalSeconds * 1000);
+    
+    // Update UI
+    document.getElementById('start-auto-refresh').style.display = 'none';
+    document.getElementById('stop-auto-refresh').style.display = 'inline-block';
+    
+    // Update button states
+    document.getElementById('start-auto-refresh').innerHTML = '<i class="fas fa-play me-1"></i>Başlat';
+    document.getElementById('stop-auto-refresh').innerHTML = `<i class="fas fa-stop me-1"></i>Durdur (${intervalSeconds}s)`;
+    
+    // Update status
+    document.getElementById('refresh-status').className = 'badge bg-success';
+    document.getElementById('refresh-status').innerHTML = `<i class="fas fa-sync fa-spin me-1"></i>Otomatik (${intervalSeconds}s)`;
+}
+
+// Stop auto refresh
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+    
+    isAutoRefreshActive = false;
+    
+    // Update UI
+    const intervalSelect = document.getElementById('refresh-interval');
+    if (intervalSelect.value !== '0') {
+        document.getElementById('start-auto-refresh').style.display = 'inline-block';
+    }
+    document.getElementById('stop-auto-refresh').style.display = 'none';
+    
+    // Update status
+    document.getElementById('refresh-status').className = 'badge bg-secondary';
+    document.getElementById('refresh-status').innerHTML = 'Manuel Mod';
+}
+
+// Show error message
+function showError(message) {
+    const alert = `
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+    
+    const container = document.querySelector('.container');
+    container.insertAdjacentHTML('afterbegin', alert);
+}
+
+// Clear interval on page unload
+window.addEventListener('beforeunload', function() {
+    stopAutoRefresh();
+});
+</script>
+{% endblock %} 

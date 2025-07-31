@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Alpha Vantage Trading Dashboard - AI Trading Advisor{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="row align-items-center mb-5">
+    <div class="col-md-6">
+        <h1 class="display-4 fw-bold text-primary mb-4">
+            <i class="fas fa-robot me-3"></i>
+            AI Trading Advisor
+        </h1>
+        <p class="lead mb-4">
+            Alpha Vantage API ile çalışan kapsamlı trading framework'ü. 
+            Forex, Stocks ve Crypto için gerçek zamanlı sentiment analizi ve akıllı sinyal üretimi.
+        </p>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+            <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-md-2">
+                <i class="fas fa-user-plus me-2"></i>Hemen Başla
+            </a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">
+                <i class="fas fa-sign-in-alt me-2"></i>Giriş Yap
+            </a>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="text-center">
+            <i class="fas fa-chart-line text-primary" style="font-size: 12rem; opacity: 0.1;"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Features Grid -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h2 class="text-center mb-5">
+            <i class="fas fa-star me-2 text-warning"></i>
+            Özellikler
+        </h2>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-brain text-primary" style="font-size: 3rem;"></i>
+                </div>
+                <h5 class="card-title">AI Trading Advisor</h5>
+                <p class="card-text">
+                    Günlük piyasa brifingi ve fırsat tarayıcısı. 
+                    6 farklı analiz metodunu birleştiren akıllı karar sistemi.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-newspaper text-success" style="font-size: 3rem;"></i>
+                </div>
+                <h5 class="card-title">Gerçek Zamanlı Haberler</h5>
+                <p class="card-text">
+                    Alpha Vantage News & Sentiment API ile canlı piyasa haberleri 
+                    ve sentiment analizi. Her hisse için ayrı veri.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-chart-bar text-warning" style="font-size: 3rem;"></i>
+                </div>
+                <h5 class="card-title">Multi-Asset Destek</h5>
+                <p class="card-text">
+                    Forex, Stocks ve Crypto için eş zamanlı analiz. 
+                    Teknik indikatörler ve korelasyon analizi.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Asset Types -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h3 class="text-center mb-4">
+            <i class="fas fa-coins me-2 text-primary"></i>
+            Desteklenen Varlıklar
+        </h3>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-exchange-alt me-2 text-primary"></i>
+                    Forex Pairs (9)
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6"><span class="badge bg-light text-dark">EURUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">GBPUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">USDJPY</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">AUDUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">USDCAD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">EURJPY</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">GBPJPY</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">USDCHF</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">NZDUSD</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-line me-2 text-success"></i>
+                    US Stocks (12)
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6"><span class="badge bg-light text-dark">AAPL</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">GOOGL</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">MSFT</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">AMZN</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">TSLA</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">NVDA</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">META</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">ORCL</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">CRM</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">ADBE</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">NFLX</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">UBER</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fab fa-bitcoin me-2 text-warning"></i>
+                    Cryptocurrencies (6)
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6"><span class="badge bg-light text-dark">BTCUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">ETHUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">ADAUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">DOTUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">LINKUSD</span></div>
+                    <div class="col-6"><span class="badge bg-light text-dark">BNBUSD</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- How It Works -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h3 class="text-center mb-4">
+            <i class="fas fa-cogs me-2 text-primary"></i>
+            Nasıl Çalışır?
+        </h3>
+    </div>
+    
+    <div class="col-md-3 text-center mb-4">
+        <div class="mb-3">
+            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                <span class="h4 mb-0">1</span>
+            </div>
+        </div>
+        <h6>Kayıt Ol</h6>
+        <p class="text-muted">Alpha Vantage API anahtarınızla hesap oluşturun</p>
+    </div>
+    
+    <div class="col-md-3 text-center mb-4">
+        <div class="mb-3">
+            <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                <span class="h4 mb-0">2</span>
+            </div>
+        </div>
+        <h6>Watchlist Oluştur</h6>
+        <p class="text-muted">İlgilendiğiniz varlıkları seçin ve takip edin</p>
+    </div>
+    
+    <div class="col-md-3 text-center mb-4">
+        <div class="mb-3">
+            <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                <span class="h4 mb-0">3</span>
+            </div>
+        </div>
+        <h6>Gerçek Zamanlı Analiz</h6>
+        <p class="text-muted">AI Trading Advisor ile kapsamlı piyasa analizi</p>
+    </div>
+    
+    <div class="col-md-3 text-center mb-4">
+        <div class="mb-3">
+            <div class="bg-danger text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                <span class="h4 mb-0">4</span>
+            </div>
+        </div>
+        <h6>Akıllı Kararlar</h6>
+        <p class="text-muted">Sentiment + teknik analiz ile bilinçli trading</p>
+    </div>
+</div>
+
+<!-- CTA Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-primary text-white text-center">
+            <div class="card-body py-5">
+                <h3 class="mb-3">
+                    <i class="fas fa-rocket me-2"></i>
+                    Hemen Başlayın!
+                </h3>
+                <p class="lead mb-4">
+                    Alpha Vantage API anahtarınızla ücretsiz hesap oluşturun 
+                    ve AI Trading Advisor'ı deneyimleyin.
+                </p>
+                <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">
+                    <i class="fas fa-user-plus me-2"></i>
+                    Ücretsiz Kayıt Ol
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

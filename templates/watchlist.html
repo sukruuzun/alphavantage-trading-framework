@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Watchlist Yönetimi - Alpha Vantage Trading{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-2">
+                    <i class="fas fa-heart me-2 text-primary"></i>
+                    Watchlist Yönetimi
+                </h1>
+                <p class="text-muted mb-0">
+                    İlgilendiğiniz varlıkları seçin ve dashboard'da takip edin
+                </p>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i>Dashboard'a Dön
+            </a>
+        </div>
+    </div>
+</div>
+
+<form method="POST">
+    {{ form.hidden_tag() }}
+    
+    <div class="row">
+        <!-- Forex Section -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-exchange-alt me-2 text-primary"></i>
+                        Forex Pairs
+                        <span class="badge bg-light text-dark" id="forex-count">0</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="select-all-forex">
+                            <label class="form-check-label fw-bold" for="select-all-forex">
+                                Tümünü Seç/Kaldır
+                            </label>
+                        </div>
+                        <hr>
+                    </div>
+                    
+                    {% for choice_value, choice_label in form.forex_symbols.choices %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input forex-checkbox" type="checkbox" 
+                               name="forex_symbols" value="{{ choice_value }}" id="forex_{{ choice_value }}"
+                               {% if choice_value in form.forex_symbols.data %}checked{% endif %}>
+                        <label class="form-check-label" for="forex_{{ choice_value }}">
+                            <span class="badge bg-light text-dark me-2">{{ choice_label }}</span>
+                            {% if choice_label == 'EURUSD' %}Euro / US Dollar
+                            {% elif choice_label == 'GBPUSD' %}British Pound / US Dollar
+                            {% elif choice_label == 'USDJPY' %}US Dollar / Japanese Yen
+                            {% elif choice_label == 'AUDUSD' %}Australian Dollar / US Dollar
+                            {% elif choice_label == 'USDCAD' %}US Dollar / Canadian Dollar
+                            {% elif choice_label == 'EURJPY' %}Euro / Japanese Yen
+                            {% elif choice_label == 'GBPJPY' %}British Pound / Japanese Yen
+                            {% elif choice_label == 'USDCHF' %}US Dollar / Swiss Franc
+                            {% elif choice_label == 'NZDUSD' %}New Zealand Dollar / US Dollar
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stocks Section -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-chart-line me-2 text-success"></i>
+                        US Stocks
+                        <span class="badge bg-light text-dark" id="stocks-count">0</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="select-all-stocks">
+                            <label class="form-check-label fw-bold" for="select-all-stocks">
+                                Tümünü Seç/Kaldır
+                            </label>
+                        </div>
+                        <hr>
+                    </div>
+                    
+                    {% for choice_value, choice_label in form.stock_symbols.choices %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input stocks-checkbox" type="checkbox" 
+                               name="stock_symbols" value="{{ choice_value }}" id="stock_{{ choice_value }}"
+                               {% if choice_value in form.stock_symbols.data %}checked{% endif %}>
+                        <label class="form-check-label" for="stock_{{ choice_value }}">
+                            <span class="badge bg-light text-dark me-2">{{ choice_label }}</span>
+                            {% if choice_label == 'AAPL' %}Apple Inc.
+                            {% elif choice_label == 'GOOGL' %}Alphabet Inc. (Google)
+                            {% elif choice_label == 'MSFT' %}Microsoft Corporation
+                            {% elif choice_label == 'AMZN' %}Amazon.com Inc.
+                            {% elif choice_label == 'TSLA' %}Tesla Inc.
+                            {% elif choice_label == 'NVDA' %}NVIDIA Corporation
+                            {% elif choice_label == 'META' %}Meta Platforms (Facebook)
+                            {% elif choice_label == 'ORCL' %}Oracle Corporation
+                            {% elif choice_label == 'CRM' %}Salesforce Inc.
+                            {% elif choice_label == 'ADBE' %}Adobe Inc.
+                            {% elif choice_label == 'NFLX' %}Netflix Inc.
+                            {% elif choice_label == 'UBER' %}Uber Technologies
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Crypto Section -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fab fa-bitcoin me-2 text-warning"></i>
+                        Cryptocurrencies
+                        <span class="badge bg-light text-dark" id="crypto-count">0</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="select-all-crypto">
+                            <label class="form-check-label fw-bold" for="select-all-crypto">
+                                Tümünü Seç/Kaldır
+                            </label>
+                        </div>
+                        <hr>
+                    </div>
+                    
+                    {% for choice_value, choice_label in form.crypto_symbols.choices %}
+                    <div class="form-check mb-2">
+                        <input class="form-check-input crypto-checkbox" type="checkbox" 
+                               name="crypto_symbols" value="{{ choice_value }}" id="crypto_{{ choice_value }}"
+                               {% if choice_value in form.crypto_symbols.data %}checked{% endif %}>
+                        <label class="form-check-label" for="crypto_{{ choice_value }}">
+                            <span class="badge bg-light text-dark me-2">{{ choice_label }}</span>
+                            {% if choice_label == 'BTCUSD' %}Bitcoin
+                            {% elif choice_label == 'ETHUSD' %}Ethereum
+                            {% elif choice_label == 'ADAUSD' %}Cardano
+                            {% elif choice_label == 'DOTUSD' %}Polkadot
+                            {% elif choice_label == 'LINKUSD' %}Chainlink
+                            {% elif choice_label == 'BNBUSD' %}Binance Coin
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">Watchlist Özeti</h6>
+                            <p class="text-muted mb-0">
+                                <span id="total-selected">0</span> varlık seçildi
+                                (<span id="forex-selected">0</span> Forex, 
+                                <span id="stocks-selected">0</span> Hisse, 
+                                <span id="crypto-selected">0</span> Crypto)
+                            </p>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary me-2" id="clear-all">
+                                <i class="fas fa-times me-1"></i>Tümünü Temizle
+                            </button>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Info Card -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-info-circle me-2 text-info"></i>
+                    Bilgilendirme
+                </h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-unstyled mb-0">
+                            <li class="mb-2">
+                                <i class="fas fa-check text-success me-2"></i>
+                                Dashboard'da seçili varlıklar gösterilir
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check text-success me-2"></i>
+                                Gerçek zamanlı fiyat güncellemeleri
+                            </li>
+                            <li>
+                                <i class="fas fa-check text-success me-2"></i>
+                                Hisse senetleri için sentiment analizi
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="list-unstyled mb-0">
+                            <li class="mb-2">
+                                <i class="fas fa-chart-bar text-primary me-2"></i>
+                                Teknik analiz sinyalleri
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-newspaper text-warning me-2"></i>
+                                Haber bazlı analiz (Stocks)
+                            </li>
+                            <li>
+                                <i class="fas fa-sync-alt text-info me-2"></i>
+                                Otomatik 60 saniye güncelleme
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize counters
+    updateCounters();
+    
+    // Select all checkboxes
+    document.getElementById('select-all-forex').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.forex-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateCounters();
+    });
+    
+    document.getElementById('select-all-stocks').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.stocks-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateCounters();
+    });
+    
+    document.getElementById('select-all-crypto').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.crypto-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateCounters();
+    });
+    
+    // Clear all
+    document.getElementById('clear-all').addEventListener('click', function() {
+        const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+        allCheckboxes.forEach(cb => cb.checked = false);
+        updateCounters();
+    });
+    
+    // Individual checkboxes
+    const allCheckboxes = document.querySelectorAll('input[type="checkbox"]:not([id^="select-all"])');
+    allCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateCounters);
+    });
+    
+    // Form submission enhancement
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const submitBtn = document.getElementById('submit');
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Güncelleniyor...';
+        submitBtn.disabled = true;
+    });
+});
+
+function updateCounters() {
+    const forexCount = document.querySelectorAll('.forex-checkbox:checked').length;
+    const stocksCount = document.querySelectorAll('.stocks-checkbox:checked').length;
+    const cryptoCount = document.querySelectorAll('.crypto-checkbox:checked').length;
+    const totalCount = forexCount + stocksCount + cryptoCount;
+    
+    document.getElementById('forex-count').textContent = forexCount;
+    document.getElementById('stocks-count').textContent = stocksCount;
+    document.getElementById('crypto-count').textContent = cryptoCount;
+    
+    document.getElementById('forex-selected').textContent = forexCount;
+    document.getElementById('stocks-selected').textContent = stocksCount;
+    document.getElementById('crypto-selected').textContent = cryptoCount;
+    document.getElementById('total-selected').textContent = totalCount;
+    
+    // Update select-all checkboxes
+    const forexCheckboxes = document.querySelectorAll('.forex-checkbox');
+    const stocksCheckboxes = document.querySelectorAll('.stocks-checkbox');
+    const cryptoCheckboxes = document.querySelectorAll('.crypto-checkbox');
+    
+    document.getElementById('select-all-forex').checked = forexCount === forexCheckboxes.length && forexCount > 0;
+    document.getElementById('select-all-stocks').checked = stocksCount === stocksCheckboxes.length && stocksCount > 0;
+    document.getElementById('select-all-crypto').checked = cryptoCount === cryptoCheckboxes.length && cryptoCount > 0;
+}
+</script>
+{% endblock %} 

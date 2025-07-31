@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Kayıt Ol - Alpha Vantage Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <i class="fas fa-user-plus text-primary" style="font-size: 3rem;"></i>
+                    <h2 class="mt-3 mb-1">Kayıt Ol</h2>
+                    <p class="text-muted">AI Trading Advisor'a katılın</p>
+                </div>
+
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.username.label(class="form-label") }}
+                        {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else "")) }}
+                        {% if form.username.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.username.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else "")) }}
+                        {% if form.email.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.email.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else "")) }}
+                        {% if form.password.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.password.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">En az 6 karakter olmalıdır.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        {{ form.api_key.label(class="form-label") }}
+                        {{ form.api_key(class="form-control" + (" is-invalid" if form.api_key.errors else ""), placeholder="Alpha Vantage API anahtarınızı girin") }}
+                        {% if form.api_key.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.api_key.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-decoration-none">
+                                Ücretsiz API anahtarı alın
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        {{ form.submit(class="btn btn-primary btn-lg") }}
+                    </div>
+                </form>
+
+                <hr class="my-4">
+
+                <div class="text-center">
+                    <p class="mb-0">
+                        Zaten hesabınız var mı? 
+                        <a href="{{ url_for('login') }}" class="text-decoration-none">
+                            Giriş yapın
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Key Info -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-key me-2 text-warning"></i>
+                    Alpha Vantage API Anahtarı Hakkında
+                </h6>
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        <strong>Ücretsiz:</strong> 25 API çağrısı/gün
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-2"></i>
+                        <strong>Premium:</strong> Unlimited çağrı
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-shield-alt text-primary me-2"></i>
+                        API anahtarınız güvenle saklanır
+                    </li>
+                    <li>
+                        <i class="fas fa-rocket text-warning me-2"></i>
+                        Gerçek zamanlı piyasa verileri
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Form validation enhancement
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kayıt ediliyor...';
+            submitBtn.disabled = true;
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %} 
