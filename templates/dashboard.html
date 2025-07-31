@@ -184,9 +184,10 @@
 let refreshInterval;
 let isAutoRefreshActive = false;
 
-// Load live data on page load
+// Load live data on page load - DISABLED to prevent Railway worker timeout
 document.addEventListener('DOMContentLoaded', function() {
-    loadLiveData();
+    // loadLiveData(); // Disabled - Use manual refresh instead
+    console.log('🔴 Auto-load disabled - Click "Yenile" button to load data');
     
     // Refresh button
     document.getElementById('refresh-data').addEventListener('click', function() {
