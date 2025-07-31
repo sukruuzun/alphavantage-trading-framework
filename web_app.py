@@ -338,10 +338,11 @@ def init_db():
         db.create_all()
         print("✅ Database initialized!")
 
-# Initialize DB for both development and production
-with app.app_context():
-    db.create_all()
-    print("✅ Database tables created!")
+# Initialize DB for both development and production - DISABLED to prevent deadlock
+# with app.app_context():
+#     db.create_all()
+#     print("✅ Database tables created!")
+# Note: Tables are already created in Railway PostgreSQL
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
