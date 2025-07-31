@@ -238,13 +238,10 @@ def manage_watchlist():
 @app.route('/api/live-data')
 @login_required
 def live_data():
-    """Canlı veri API endpoint'i"""
+    """Canlı veri API endpoint'i - HIZLI CACHE'DEN OKUMA"""
     try:
-        # Lazy import to prevent Railway worker timeout
-        from alphavantage_provider import AlphaVantageProvider
-        from universal_trading_framework import UniversalTradingBot, AssetType
-        
-        provider = AlphaVantageProvider(api_key=current_user.api_key, is_premium=True)
+        # Background worker'ın cache'ini import et
+        from worker import DATA_CACHE
         
         # Get user's watchlist
         watchlist_items = Watchlist.query.filter_by(user_id=current_user.id).all()
@@ -256,41 +253,32 @@ def live_data():
             'timestamp': datetime.now().isoformat()
         }
         
-        # Fetch data for each watched symbol
-        for item in watchlist_items[:15]:  # Limit to 15 items to avoid rate limits
-            try:
-                symbol = item.symbol
-                asset_type = item.asset_type
-                
-                # Get current price
-                price = provider.get_current_price(symbol)
-                
-                # Get sentiment if it's a stock
-                sentiment_score = None
-                if asset_type == 'stocks':
-                    sentiment_data = provider.get_news_sentiment([symbol], limit=5)
-                    sentiment_score = sentiment_data.get('overall_sentiment', 0)
-                
-                # Quick technical analysis
-                framework = UniversalTradingBot(provider, 
-                    AssetType.FOREX if asset_type == 'forex' 
-                    else AssetType.STOCKS if asset_type == 'stocks' 
-                    else AssetType.CRYPTO)
-                
-                analysis = framework.analyze_symbol(symbol)
-                
+        # Cache'den veri oku (SÜPER HIZLI!)
+        for item in watchlist_items:
+            symbol = item.symbol
+            asset_type = item.asset_type
+            
+            # Cache'de varsa kullan
+            if symbol in DATA_CACHE:
+                cache_data = DATA_CACHE[symbol]
                 result_item = {
                     'symbol': symbol,
-                    'price': price,
-                    'signal': analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error',
-                    'sentiment': sentiment_score
+                    'price': cache_data.get('price', 0),
+                    'signal': cache_data.get('signal', 'hold'),
+                    'sentiment': cache_data.get('sentiment'),
+                    'last_updated': cache_data.get('last_updated', 'N/A')
                 }
-                
                 results[asset_type].append(result_item)
-                
-            except Exception as e:
-                logging.error(f"Error fetching data for {symbol}: {e}")
-                continue
+            else:
+                # Cache'de yoksa placeholder
+                result_item = {
+                    'symbol': symbol,
+                    'price': 0,
+                    'signal': 'loading',
+                    'sentiment': None,
+                    'last_updated': 'Worker güncelliyor...'
+                }
+                results[asset_type].append(result_item)
         
         return jsonify(results)
         
