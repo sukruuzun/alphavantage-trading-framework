@@ -54,12 +54,11 @@ AVAILABLE_ASSETS = {
 
 # 📄 Database Models
 class User(UserMixin, db.Model):
-    """Kullanıcı modeli"""
+    """Kullanıcı modeli - Merkezi veri servisi (API key gerekmez)"""
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
-    api_key = db.Column(db.String(255))  # Alpha Vantage API key
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -105,11 +104,10 @@ def load_user(user_id):
 
 # 📝 Forms
 class RegistrationForm(FlaskForm):
-    """Kayıt formu"""
+    """Kayıt formu - Merkezi veri servisi (API key gerekmez)"""
     username = StringField('Kullanıcı Adı', validators=[DataRequired(), Length(min=4, max=20)])
     email = StringField('Email', validators=[DataRequired(), Email()])
     password = PasswordField('Şifre', validators=[DataRequired(), Length(min=6)])
-    api_key = StringField('Alpha Vantage API Key', validators=[DataRequired()])
     submit = SubmitField('Kayıt Ol')
 
 class LoginForm(FlaskForm):
@@ -150,27 +148,18 @@ def register():
             flash('Bu email zaten kayıtlı!', 'danger')
             return render_template('register.html', form=form)
         
-        # Test API key
-        try:
-            provider = AlphaVantageProvider(api_key=form.api_key.data)
-            test_data = provider.get_current_price('AAPL')  # Test call
-            
-            # Create new user
-            user = User(
-                username=form.username.data,
-                email=form.email.data,
-                api_key=form.api_key.data
-            )
-            user.set_password(form.password.data)
-            
-            db.session.add(user)
-            db.session.commit()
-            
-            flash('Kayıt başarılı! Giriş yapabilirsiniz.', 'success')
-            return redirect(url_for('login'))
-            
-        except Exception as e:
-            flash(f'API anahtarı geçersiz: {str(e)}', 'danger')
+        # Create new user (API key gerekmez - merkezi veri servisi)
+        user = User(
+            username=form.username.data,
+            email=form.email.data
+        )
+        user.set_password(form.password.data)
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        flash('Kayıt başarılı! Giriş yapabilirsiniz.', 'success')
+        return redirect(url_for('login'))
             
     return render_template('register.html', form=form)
 
@@ -326,7 +315,12 @@ def get_symbol_news(symbol):
         # Lazy import to prevent Railway worker timeout
         from alphavantage_provider import AlphaVantageProvider
         
-        provider = AlphaVantageProvider(api_key=current_user.api_key, is_premium=True)
+        # Merkezi sistem API key kullan
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+            
+        provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
         news_data = provider.get_news_sentiment([symbol], limit=10)
         
         return jsonify({
@@ -346,11 +340,11 @@ def init_db():
         db.create_all()
         print("✅ Database initialized!")
 
-# Initialize DB for both development and production - ENABLED for CachedData table
+# Initialize DB for both development and production - ENABLED for User model migration (api_key removed)
 with app.app_context():
     db.create_all()
-    print("✅ Database tables created!")
-# Note: Will be disabled again after CachedData table is created
+    print("✅ Database tables created/migrated!")
+# Note: User table updated (api_key column removed), CachedData table added
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

@@ -53,23 +53,7 @@
                         <div class="form-text">En az 6 karakter olmalıdır.</div>
                     </div>
 
-                    <div class="mb-4">
-                        {{ form.api_key.label(class="form-label") }}
-                        {{ form.api_key(class="form-control" + (" is-invalid" if form.api_key.errors else ""), placeholder="Alpha Vantage API anahtarınızı girin") }}
-                        {% if form.api_key.errors %}
-                            <div class="invalid-feedback">
-                                {% for error in form.api_key.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                        <div class="form-text">
-                            <i class="fas fa-info-circle me-1"></i>
-                            <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-decoration-none">
-                                Ücretsiz API anahtarı alın
-                            </a>
-                        </div>
-                    </div>
+                    <!-- API key artık gerekmiyor - Merkezi veri servisi kullanıyoruz -->
 
                     <div class="d-grid">
                         {{ form.submit(class="btn btn-primary btn-lg") }}

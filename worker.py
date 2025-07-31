@@ -36,15 +36,20 @@ def update_data_for_all_users():
     
     with app.app_context():
         try:
-            # Tüm kullanıcıları al
+            # Tüm kullanıcıları kontrol et (watchlist için gerekli)
             users = User.query.all()
             if not users:
                 logger.warning("❌ Hiç kullanıcı bulunamadı. Bekleniyor...")
                 return
 
-            # İlk kullanıcının API key'ini kullan (daha iyi: sistem API key'i)
-            first_user = users[0]
-            provider = AlphaVantageProvider(api_key=first_user.api_key, is_premium=True)
+            # Merkezi sistem API key kullan
+            system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY')
+            if not system_api_key:
+                logger.error("❌ SYSTEM_ALPHA_VANTAGE_KEY environment variable bulunamadı!")
+                return
+                
+            provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
+            logger.info(f"🔑 Sistem API key kullanılıyor: {system_api_key[:8]}...")
 
             # Tüm benzersiz sembolleri topla
             all_watchlist_items = Watchlist.query.all()
