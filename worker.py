@@ -10,16 +10,13 @@ import logging
 from datetime import datetime
 
 # Flask app ve modellerini import et
-from web_app import app, db, User, Watchlist
+from web_app import app, db, User, Watchlist, CachedData
 from alphavantage_provider import AlphaVantageProvider
 from universal_trading_framework import UniversalTradingBot, AssetType
 
 # Loglama kurulumu
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Basit in-memory cache (Production'da Redis kullanılmalı)
-DATA_CACHE = {}
 
 def get_asset_type(symbol, available_assets):
     """Sembol için doğru asset type'ı bul"""
@@ -87,27 +84,48 @@ def update_data_for_all_users():
                         except:
                             sentiment_score = 0
 
-                    # Cache'e kaydet
-                    DATA_CACHE[symbol] = {
-                        'price': price,
-                        'signal': analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error',
-                        'sentiment': sentiment_score,
-                        'last_updated': datetime.now().isoformat(),
-                        'timestamp': time.time()
-                    }
+                    # Database cache'e kaydet
+                    cached_data = CachedData.query.filter_by(symbol=symbol).first()
+                    if cached_data:
+                        # Mevcut kayıt varsa güncelle
+                        cached_data.price = price
+                        cached_data.signal = analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error' 
+                        cached_data.sentiment = sentiment_score
+                        cached_data.last_updated = datetime.now()
+                        cached_data.error_message = None
+                    else:
+                        # Yeni kayıt oluştur
+                        cached_data = CachedData(
+                            symbol=symbol,
+                            price=price,
+                            signal=analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error',
+                            sentiment=sentiment_score,
+                            last_updated=datetime.now(),
+                            error_message=None
+                        )
+                        db.session.add(cached_data)
                     
                     logger.info(f"✅ {symbol}: ${price} | {analysis.get('final_signal', 'N/A')}")
                     successful_updates += 1
+                    
+                    # Database'e commit
+                    db.session.commit()
                     
                     # Rate limiting
                     time.sleep(2)
                     
                 except Exception as e:
                     logger.error(f"❌ {symbol} için veri çekilemedi: {e}")
-                    # Hata durumunda eski veriyi koru, sadece timestamp güncelle
-                    if symbol in DATA_CACHE:
-                        DATA_CACHE[symbol]['last_updated'] = datetime.now().isoformat()
-                        DATA_CACHE[symbol]['error'] = str(e)
+                    # Hata durumunda database'e error kaydet
+                    try:
+                        cached_data = CachedData.query.filter_by(symbol=symbol).first()
+                        if cached_data:
+                            cached_data.error_message = str(e)
+                            cached_data.last_updated = datetime.now()
+                            db.session.commit()
+                    except Exception as db_error:
+                        logger.error(f"❌ Database error for {symbol}: {db_error}")
+                        db.session.rollback()
 
             logger.info(f"✅ Veri güncelleme tamamlandı: {successful_updates}/{len(unique_symbols)} başarılı")
             
@@ -118,6 +136,11 @@ def main():
     """Ana worker döngüsü"""
     logger.info("🚀 Alpha Vantage Background Worker başlatıldı")
     logger.info("📊 Her 5 dakikada veri güncellenecek")
+    
+    # Database tablolarını oluştur (gerekirse)
+    with app.app_context():
+        db.create_all()
+        logger.info("✅ Database tables ready!")
     
     while True:
         try:

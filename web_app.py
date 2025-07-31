@@ -79,6 +79,26 @@ class Watchlist(db.Model):
     symbol = db.Column(db.String(20), nullable=False)
     added_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class CachedData(db.Model):
+    """Background worker'ın güncelediği cache verisi"""
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), unique=True, nullable=False)
+    price = db.Column(db.Float, nullable=False, default=0.0)
+    signal = db.Column(db.String(20), nullable=False, default='hold')
+    sentiment = db.Column(db.Float, nullable=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    error_message = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'symbol': self.symbol,
+            'price': self.price,
+            'signal': self.signal,
+            'sentiment': self.sentiment,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+            'error': self.error_message
+        }
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -238,11 +258,8 @@ def manage_watchlist():
 @app.route('/api/live-data')
 @login_required
 def live_data():
-    """Canlı veri API endpoint'i - HIZLI CACHE'DEN OKUMA"""
+    """Canlı veri API endpoint'i - DATABASE CACHE'DEN OKUMA"""
     try:
-        # Background worker'ın cache'ini import et
-        from worker import DATA_CACHE
-        
         # Get user's watchlist
         watchlist_items = Watchlist.query.filter_by(user_id=current_user.id).all()
         
@@ -253,30 +270,33 @@ def live_data():
             'timestamp': datetime.now().isoformat()
         }
         
-        # Cache'den veri oku (SÜPER HIZLI!)
+        # Database cache'den veri oku (SÜPER HIZLI!)
         for item in watchlist_items:
             symbol = item.symbol
             asset_type = item.asset_type
             
-            # Cache'de varsa kullan
-            if symbol in DATA_CACHE:
-                cache_data = DATA_CACHE[symbol]
+            # Database'den cached data al
+            cached_data = CachedData.query.filter_by(symbol=symbol).first()
+            
+            if cached_data:
                 result_item = {
                     'symbol': symbol,
-                    'price': cache_data.get('price', 0),
-                    'signal': cache_data.get('signal', 'hold'),
-                    'sentiment': cache_data.get('sentiment'),
-                    'last_updated': cache_data.get('last_updated', 'N/A')
+                    'price': cached_data.price,
+                    'signal': cached_data.signal,
+                    'sentiment': cached_data.sentiment,
+                    'last_updated': cached_data.last_updated.strftime('%H:%M:%S') if cached_data.last_updated else 'N/A',
+                    'error': cached_data.error_message
                 }
                 results[asset_type].append(result_item)
             else:
-                # Cache'de yoksa placeholder
+                # Database'de yoksa placeholder
                 result_item = {
                     'symbol': symbol,
                     'price': 0,
                     'signal': 'loading',
                     'sentiment': None,
-                    'last_updated': 'Worker güncelliyor...'
+                    'last_updated': 'Worker güncelliyor...',
+                    'error': None
                 }
                 results[asset_type].append(result_item)
         
@@ -326,11 +346,11 @@ def init_db():
         db.create_all()
         print("✅ Database initialized!")
 
-# Initialize DB for both development and production - DISABLED to prevent deadlock
-# with app.app_context():
-#     db.create_all()
-#     print("✅ Database tables created!")
-# Note: Tables are already created in Railway PostgreSQL
+# Initialize DB for both development and production - ENABLED for CachedData table
+with app.app_context():
+    db.create_all()
+    print("✅ Database tables created!")
+# Note: Will be disabled again after CachedData table is created
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
