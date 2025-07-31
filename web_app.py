@@ -16,9 +16,9 @@ import json
 import logging
 import os
 
-# Import our existing framework
-from alphavantage_provider import AlphaVantageProvider
-from universal_trading_framework import UniversalTradingBot, AssetType
+# Import our existing framework - LAZY LOADING for Railway
+# from alphavantage_provider import AlphaVantageProvider
+# from universal_trading_framework import UniversalTradingBot, AssetType
 
 app = Flask(__name__)
 
@@ -240,6 +240,10 @@ def manage_watchlist():
 def live_data():
     """Canlı veri API endpoint'i"""
     try:
+        # Lazy import to prevent Railway worker timeout
+        from alphavantage_provider import AlphaVantageProvider
+        from universal_trading_framework import UniversalTradingBot, AssetType
+        
         provider = AlphaVantageProvider(api_key=current_user.api_key, is_premium=True)
         
         # Get user's watchlist
@@ -310,6 +314,9 @@ def get_symbol_news(symbol):
                 'top_news': [],
                 'message': 'Haber servisi sadece US hisse senetleri için mevcuttur'
             })
+        
+        # Lazy import to prevent Railway worker timeout
+        from alphavantage_provider import AlphaVantageProvider
         
         provider = AlphaVantageProvider(api_key=current_user.api_key, is_premium=True)
         news_data = provider.get_news_sentiment([symbol], limit=10)
