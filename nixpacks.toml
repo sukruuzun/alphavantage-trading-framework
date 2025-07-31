@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python39", "gcc", "postgresql"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = ["echo 'Build phase complete'"]
+
+[start]
+cmd = "gunicorn web_app:app --worker-class gevent --timeout 180 --workers 4" 
