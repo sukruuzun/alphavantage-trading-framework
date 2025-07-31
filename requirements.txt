@@ -7,6 +7,7 @@ WTForms==3.1.1
 Werkzeug==2.3.7
 email_validator==2.2.0
 gunicorn==21.2.0
+gevent==23.9.1
 psycopg2-binary==2.9.7
 
 # Database
