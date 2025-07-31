@@ -141,11 +141,11 @@ class AlphaVantageProvider(DataProvider):
             ("USDJPY", "NVDA"): 0.25,  # USD strength vs tech
         }
         
-        # Başlatma logları
-        self.logger.info(f"🏛️ Alpha Vantage Provider başlatıldı")
-        self.logger.info(f"📊 {len(self.symbol_mapping)} enstrüman destekleniyor")
-        self.logger.info(f"⚡ Plan: {plan_info}")
-        self.logger.info(f"🕐 Cache: {self.cache_duration}s, Rate limit: {self.call_interval}s")
+        # Başlatma logları - DISABLED for Railway worker timeout prevention
+        # self.logger.info(f"🏛️ Alpha Vantage Provider başlatıldı")
+        # self.logger.info(f"📊 {len(self.symbol_mapping)} enstrüman destekleniyor")
+        # self.logger.info(f"⚡ Plan: {plan_info}")
+        # self.logger.info(f"🕐 Cache: {self.cache_duration}s, Rate limit: {self.call_interval}s")
         
     def _rate_limit(self):
         """Dynamic Rate limiting - Plan tipine göre"""
@@ -317,7 +317,7 @@ class AlphaVantageProvider(DataProvider):
                     'timestamp': time.time()
                 }
                 
-            self.logger.info(f"📰 {len(news_feed)} haber analiz edildi - Sentiment: {overall_sentiment:.3f}")
+            # self.logger.info(f"📰 {len(news_feed)} haber analiz edildi - Sentiment: {overall_sentiment:.3f}")  # Disabled for Railway
             return result
             
         except Exception as e:

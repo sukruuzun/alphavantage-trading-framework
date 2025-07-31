@@ -265,7 +265,7 @@ class UniversalTradingBot:
         self.risk_manager = RiskManager()
         
         self.logger = logging.getLogger(__name__)
-        self.logger.info(f"UniversalTradingBot başlatıldı - Varlık türü: {asset_type.value}")
+        # self.logger.info(f"UniversalTradingBot başlatıldı - Varlık türü: {asset_type.value}")  # Disabled for Railway
     
     def analyze_symbol(self, symbol: str, timeframe: str = '1m') -> Dict:
         """
