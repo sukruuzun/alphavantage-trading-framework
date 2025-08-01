@@ -20,6 +20,9 @@ import os
 # from alphavantage_provider import AlphaVantageProvider
 # from universal_trading_framework import UniversalTradingBot, AssetType
 
+# Import centralized constants
+from constants import AVAILABLE_ASSETS
+
 app = Flask(__name__)
 
 # Load configuration
@@ -37,20 +40,7 @@ login_manager.login_view = 'login'
 # Logging
 logging.basicConfig(level=logging.INFO)
 
-# 📊 Available Assets Configuration
-AVAILABLE_ASSETS = {
-    'forex': [
-        'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD',
-        'EURJPY', 'GBPJPY', 'USDCHF', 'NZDUSD'
-    ],
-    'stocks': [
-        'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META',
-        'ORCL', 'CRM', 'ADBE', 'NFLX', 'UBER'
-    ],
-    'crypto': [
-        'BTCUSD', 'ETHUSD', 'ADAUSD', 'DOTUSD', 'LINKUSD', 'BNBUSD'
-    ]
-}
+# 📊 Available Assets Configuration moved to constants.py (DRY principle)
 
 # 📄 Database Models
 class User(UserMixin, db.Model):
@@ -97,6 +87,20 @@ class CachedData(db.Model):
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'error': self.error_message
         }
+
+class CorrelationCache(db.Model):
+    """Dinamik olarak hesaplanan korelasyon katsayılarını saklar"""
+    id = db.Column(db.Integer, primary_key=True)
+    symbol_1 = db.Column(db.String(20), nullable=False, index=True)
+    symbol_2 = db.Column(db.String(20), nullable=False, index=True)
+    correlation_value = db.Column(db.Float, nullable=False)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # İki sembol çiftinin benzersiz olmasını sağlar
+    __table_args__ = (db.UniqueConstraint('symbol_1', 'symbol_2', name='_symbol_pair_uc'),)
+
+    def __repr__(self):
+        return f'<CorrelationCache {self.symbol_1}-{self.symbol_2}: {self.correlation_value:.3f}>'
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -340,11 +344,11 @@ def init_db():
         db.create_all()
         print("✅ Database initialized!")
 
-# Initialize DB for both development and production - ENABLED for User model migration (api_key removed)
+# Initialize DB for both development and production - ENABLED for CorrelationCache table creation
 with app.app_context():
     db.create_all()
     print("✅ Database tables created/migrated!")
-# Note: User table updated (api_key column removed), CachedData table added
+# Note: CorrelationCache table added for dynamic correlations
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

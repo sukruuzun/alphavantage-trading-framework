@@ -26,6 +26,9 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 
+# Import for dynamic correlations
+from constants import CORRELATION_CONFIG
+
 class AlphaVantageProvider(DataProvider):
     """
     🏛️ Alpha Vantage Tam Entegrasyon Provider
@@ -121,25 +124,7 @@ class AlphaVantageProvider(DataProvider):
             "BTCUSD": 10.0, "ETHUSD": 2.0, "ADAUSD": 0.001, "DOTUSD": 0.01,
         }
         
-        # Korelasyon matrisi
-        self.correlations = {
-            # Forex correlations
-            ("EURUSD", "GBPUSD"): 0.65,
-            ("EURUSD", "USDJPY"): -0.45, 
-            ("GBPUSD", "GBPJPY"): 0.85,
-            
-            # Tech stock correlations
-            ("AAPL", "MSFT"): 0.75,
-            ("GOOGL", "META"): 0.70,
-            ("TSLA", "NVDA"): 0.60,
-            
-            # Crypto correlations
-            ("BTCUSD", "ETHUSD"): 0.85,
-            
-            # Cross-asset correlations
-            ("TSLA", "BTCUSD"): 0.35,  # Tech-crypto correlation
-            ("USDJPY", "NVDA"): 0.25,  # USD strength vs tech
-        }
+        # Korelasyon matrisi artık dinamik - Database'den okunuyor
         
         # Başlatma logları - DISABLED for Railway worker timeout prevention
         # self.logger.info(f"🏛️ Alpha Vantage Provider başlatıldı")
@@ -336,58 +321,93 @@ class AlphaVantageProvider(DataProvider):
         
     def get_correlation_signal(self, primary_symbol: str, tech_signal: Signal) -> Signal:
         """
-        Korelasyon + Sentiment bazlı sinyal (Optimized)
+        DİNAMİK Korelasyon + Sentiment bazlı sinyal
         
-        ⚠️ NOT: Bu fonksiyon simülasyon içerir:
-        - Korelasyon matrisi: Önceden tanımlanmış statik değerler
-        - Sentiment analizi: Gerçek Alpha Vantage News API verisi
-        - Trend hesaplama: Cache'li fiyat verisi bazlı basit hesaplama
-        
-        Gerçek trading için korelasyon matrisi canlı piyasa verisiyle güncellenmeli.
+        ✅ YENİ: Korelasyon matrisi gerçek piyasa verisiyle hesaplanıyor
+        ✅ Veritabanından dinamik korelasyon okuma
+        ✅ 90 günlük tarihsel veriye dayalı korelasyonlar
         """
         try:
-            # 1. Temel korelasyon analizi
+            # Lazy import to avoid circular imports
+            from web_app import app, CorrelationCache
+            
             correlation_score = 0
             correlation_count = 0
             
-            for (sym1, sym2), corr_value in self.correlations.items():
-                if primary_symbol == sym1:
-                    other_trend = self._get_cached_price_trend(sym2)
-                    correlation_score += corr_value * other_trend
-                    correlation_count += 1
-                elif primary_symbol == sym2:
-                    other_trend = self._get_cached_price_trend(sym1)
-                    correlation_score += corr_value * other_trend
-                    correlation_count += 1
+            # 1. Veritabanından dinamik korelasyonları çek
+            with app.app_context():
+                # primary_symbol'ün hem symbol_1 hem de symbol_2 olabileceği durumları sorgula
+                correlations = CorrelationCache.query.filter(
+                    (CorrelationCache.symbol_1 == primary_symbol) | 
+                    (CorrelationCache.symbol_2 == primary_symbol)
+                ).filter(
+                    CorrelationCache.correlation_value.abs() >= CORRELATION_CONFIG['correlation_threshold']
+                ).all()
+
+            if not correlations:
+                self.logger.debug(f"🔍 {primary_symbol} için anlamlı korelasyon verisi bulunamadı (threshold: {CORRELATION_CONFIG['correlation_threshold']})")
+                # Korelasyon verisi yoksa sadece sentiment kullan
+                return self._sentiment_only_signal(primary_symbol)
+
+            # 2. Korelasyon skorunu hesapla
+            for corr_pair in correlations:
+                # Diğer sembolü ve korelasyon değerini al
+                other_symbol = corr_pair.symbol_2 if corr_pair.symbol_1 == primary_symbol else corr_pair.symbol_1
+                corr_value = corr_pair.correlation_value
+                
+                # Diğer sembolün trend'ini al
+                other_trend = self._get_cached_price_trend(other_symbol)
+                correlation_score += corr_value * other_trend
+                correlation_count += 1
+                
+                self.logger.debug(f"📊 {primary_symbol} ↔ {other_symbol}: {corr_value:.3f} (trend: {other_trend:.2f})")
                     
-            # 2. Sentiment analizi (sadece stocks için)
+            # 3. Sentiment analizi (sadece stocks için)
             sentiment_score = 0
             if self.symbol_mapping.get(primary_symbol, {}).get('type') == 'stock':
                 try:
-                    sentiment_data = self.get_news_sentiment([primary_symbol], limit=20)
+                    sentiment_data = self.get_news_sentiment([primary_symbol], limit=15)
                     sentiment_score = sentiment_data['overall_sentiment']
                     self.logger.debug(f"📰 {primary_symbol} sentiment: {sentiment_score:.3f}")
                 except:
                     sentiment_score = 0
                     
-            # 3. Final karar
+            # 4. Final karar (dinamik korelasyon + sentiment)
             if correlation_count > 0:
                 avg_correlation = correlation_score / correlation_count
-            else:
-                avg_correlation = 0
+                # Korelasyona %70, sentiment'a %30 ağırlık ver
+                combined_score = (avg_correlation * 0.7) + (sentiment_score * 0.3)
                 
-            # Korelasyon + Sentiment birleştirme
-            combined_score = (avg_correlation + sentiment_score) / 2
-            
-            if combined_score > 0.3:
-                return Signal.BUY
-            elif combined_score < -0.3:
-                return Signal.SELL
+                if combined_score > 0.25:
+                    return Signal.BUY
+                elif combined_score < -0.25:
+                    return Signal.SELL
+                else:
+                    return Signal.HOLD
             else:
-                return Signal.HOLD
+                # Korelasyon yoksa sadece sentiment
+                return self._sentiment_only_signal(primary_symbol)
                 
         except Exception as e:
-            self.logger.warning(f"⚠️ {primary_symbol} korelasyon/sentiment hatası: {e}")
+            self.logger.warning(f"⚠️ {primary_symbol} dinamik korelasyon hatası: {e}")
+            return Signal.HOLD
+    
+    def _sentiment_only_signal(self, primary_symbol: str) -> Signal:
+        """Sadece sentiment bazlı sinyal (korelasyon yoksa)"""
+        try:
+            if self.symbol_mapping.get(primary_symbol, {}).get('type') == 'stock':
+                sentiment_data = self.get_news_sentiment([primary_symbol], limit=10)
+                sentiment_score = sentiment_data['overall_sentiment']
+                
+                if sentiment_score > 0.3:
+                    return Signal.BUY
+                elif sentiment_score < -0.3:
+                    return Signal.SELL
+                else:
+                    return Signal.HOLD
+            else:
+                return Signal.HOLD  # Non-stock assets without correlation
+        except:
             return Signal.HOLD
             
     def _get_cached_price_trend(self, symbol: str) -> float:
