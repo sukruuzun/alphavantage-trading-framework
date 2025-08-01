@@ -63,7 +63,7 @@ def calculate_and_store_correlations(provider):
             
             if not df.empty and len(df) >= CORRELATION_CONFIG['min_data_points']:
                 # Close fiyatları al
-                price_data[symbol] = df['Close'].fillna(method='ffill', limit=10).dropna()
+                price_data[symbol] = df['Close'].ffill(limit=10).dropna()
                 logger.info(f"✅ {symbol}: {len(price_data[symbol])} veri noktası")
             else:
                 logger.warning(f"⚠️ {symbol}: Yetersiz veri ({len(df) if not df.empty else 0} nokta)")
@@ -80,48 +80,51 @@ def calculate_and_store_correlations(provider):
 
     try:
         # Yüzdesel değişime göre korelasyon hesapla (daha stabil)
-        full_df = pd.DataFrame(price_data).pct_change().dropna()
+        full_df = pd.DataFrame(price_data).pct_change(fill_method=None).dropna()
         correlation_matrix = full_df.corr()
         
         logger.info("✅ Korelasyon matrisi hesaplandı. Veritabanına kaydediliyor...")
         
-        # Veritabenına kaydet
-        valid_correlations = 0
-        
-        # Önceki verileri temizle
-        CorrelationCache.query.delete()
-        
-        # Yeni verileri ekle
-        for symbol_1 in correlation_matrix.columns:
-            for symbol_2 in correlation_matrix.columns:
-                if symbol_1 >= symbol_2:  # Tekrarlı çiftleri önle
-                    continue
-                
-                corr_value = correlation_matrix.loc[symbol_1, symbol_2]
-                
-                # NaN olmayan ve anlamlı korelasyonları kaydet
-                if pd.notna(corr_value) and abs(corr_value) >= CORRELATION_CONFIG['correlation_threshold']:
-                    new_corr = CorrelationCache(
-                        symbol_1=symbol_1,
-                        symbol_2=symbol_2,
-                        correlation_value=float(corr_value)
-                    )
-                    db.session.add(new_corr)
-                    valid_correlations += 1
-        
-        db.session.commit()
-        logger.info(f"✅ {valid_correlations} anlamlı korelasyon veritabanına kaydedildi")
-        
-        # Örnek korelasyonları logla
-        sample_corrs = CorrelationCache.query.order_by(CorrelationCache.correlation_value.desc()).limit(5).all()
-        for corr in sample_corrs:
-            logger.info(f"📊 En yüksek korelasyon: {corr.symbol_1} ↔ {corr.symbol_2}: {corr.correlation_value:.3f}")
+        # Flask app context içinde database işlemleri
+        with app.app_context():
+            # Veritabenına kaydet
+            valid_correlations = 0
             
+            # Önceki verileri temizle
+            CorrelationCache.query.delete()
+            
+            # Yeni verileri ekle
+            for symbol_1 in correlation_matrix.columns:
+                for symbol_2 in correlation_matrix.columns:
+                    if symbol_1 >= symbol_2:  # Tekrarlı çiftleri önle
+                        continue
+                    
+                    corr_value = correlation_matrix.loc[symbol_1, symbol_2]
+                    
+                    # NaN olmayan ve anlamlı korelasyonları kaydet
+                    if pd.notna(corr_value) and abs(corr_value) >= CORRELATION_CONFIG['correlation_threshold']:
+                        new_corr = CorrelationCache(
+                            symbol_1=symbol_1,
+                            symbol_2=symbol_2,
+                            correlation_value=float(corr_value)
+                        )
+                        db.session.add(new_corr)
+                        valid_correlations += 1
+            
+            db.session.commit()
+            logger.info(f"✅ {valid_correlations} anlamlı korelasyon veritabanına kaydedildi")
+            
+            # Örnek korelasyonları logla
+            sample_corrs = CorrelationCache.query.order_by(CorrelationCache.correlation_value.desc()).limit(5).all()
+            for corr in sample_corrs:
+                logger.info(f"📊 En yüksek korelasyon: {corr.symbol_1} ↔ {corr.symbol_2}: {corr.correlation_value:.3f}")
+                
         return True
         
     except Exception as e:
         logger.error(f"❌ Korelasyon hesaplama/kaydetme hatası: {e}")
-        db.session.rollback()
+        with app.app_context():
+            db.session.rollback()
         return False
 
 def update_data_for_all_users():

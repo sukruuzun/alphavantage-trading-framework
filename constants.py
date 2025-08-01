@@ -10,10 +10,10 @@ AVAILABLE_ASSETS = {
     ],
     'stocks': [
         'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META',
-        'ORCL', 'CRM', 'ADBE', 'NFLX', 'UBER'
+        'ORCL', 'CRM', 'ADBE', 'NFLX'  # UBER removed (not supported)
     ],
     'crypto': [
-        'BTCUSD', 'ETHUSD', 'ADAUSD', 'DOTUSD', 'LINKUSD', 'BNBUSD'
+        'BTCUSD', 'ETHUSD', 'ADAUSD', 'DOTUSD'  # LINKUSD, BNBUSD removed (not supported)
     ]
 }
 
