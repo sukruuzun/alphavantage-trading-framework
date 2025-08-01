@@ -10,12 +10,12 @@ import logging
 from datetime import datetime
 
 # Flask app ve modellerini import et
-from web_app import app, db, User, Watchlist, CachedData, CorrelationCache
+from web_app import app, db, User, Watchlist, CachedData, CorrelationCache, Asset
 from alphavantage_provider import AlphaVantageProvider
 from universal_trading_framework import UniversalTradingBot, AssetType
 
-# Import centralized constants
-from constants import AVAILABLE_ASSETS, CORRELATION_CONFIG
+# Import correlation config only (not AVAILABLE_ASSETS - using database now)
+from constants import CORRELATION_CONFIG
 
 # Additional imports for correlation calculation
 import pandas as pd
@@ -37,14 +37,50 @@ def get_asset_type(symbol, available_assets):
                 return AssetType.CRYPTO
     return AssetType.STOCKS  # Default
 
+def get_active_symbols_from_db():
+    """Veritabanından aktif olan tüm varlık sembollerini çeker"""
+    with app.app_context():
+        try:
+            # Asset tablosundan aktif varlıkları çek
+            forex_assets = [a.symbol for a in Asset.query.filter_by(asset_type='forex', is_active=True).all()]
+            stock_assets = [a.symbol for a in Asset.query.filter_by(asset_type='stock', is_active=True).all()]  
+            crypto_assets = [a.symbol for a in Asset.query.filter_by(asset_type='crypto', is_active=True).all()]
+            
+            logger.info(f"📊 Database'den çekilen varlıklar:")
+            logger.info(f"   Forex: {len(forex_assets)} varlık")
+            logger.info(f"   Stocks: {len(stock_assets)} varlık")  
+            logger.info(f"   Crypto: {len(crypto_assets)} varlık")
+            
+            # Eğer database boşsa, fallback constants kullan
+            total_assets = len(forex_assets) + len(stock_assets) + len(crypto_assets)
+            
+            if total_assets == 0:
+                logger.warning("⚠️ Database'de varlık bulunamadı, fallback constants kullanılıyor")
+                # Fallback to constants if database is empty
+                from constants import AVAILABLE_ASSETS
+                return AVAILABLE_ASSETS
+            
+            return {
+                'forex': forex_assets,
+                'stocks': stock_assets,
+                'crypto': crypto_assets
+            }
+        except Exception as e:
+            logger.error(f"❌ Database varlık okuma hatası: {e}")
+            logger.warning("⚠️ Fallback constants kullanılıyor")
+            # Fallback to constants on error
+            from constants import AVAILABLE_ASSETS
+            return AVAILABLE_ASSETS
+
 def calculate_and_store_correlations(provider):
     """Tüm varlıklar için korelasyon matrisini hesaplar ve veritabanına kaydeder"""
     logger.info("📈 Dinamik korelasyon hesaplaması başlıyor...")
     
-    # Tüm sembolleri topla
-    all_symbols = (AVAILABLE_ASSETS['forex'] + 
-                   AVAILABLE_ASSETS['stocks'] + 
-                   AVAILABLE_ASSETS['crypto'])
+    # Tüm sembolleri database'den al
+    available_assets = get_active_symbols_from_db()
+    all_symbols = (available_assets['forex'] + 
+                   available_assets['stocks'] + 
+                   available_assets['crypto'])
     
     price_data = {}
     
@@ -148,13 +184,32 @@ def update_data_for_all_users():
             provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
             logger.info(f"🔑 Sistem API key kullanılıyor: {system_api_key[:8]}...")
 
-            # Tüm benzersiz sembolleri topla
-            all_watchlist_items = Watchlist.query.all()
-            unique_symbols = {item.symbol for item in all_watchlist_items}
+            # Veritabanından aktif varlıkları çek (database-driven dynamic assets)
+            available_assets = get_active_symbols_from_db()
             
-            logger.info(f"🔄 {len(unique_symbols)} benzersiz varlık için veri çekilecek...")
-
-            # Available assets artık constants.py'den import ediliyor (DRY principle)
+            # Tüm available sembol listesi (korelasyon için gerekli)
+            all_available_symbols = set(available_assets['forex'] + 
+                                       available_assets['stocks'] + 
+                                       available_assets['crypto'])
+            
+            # Kullanıcı watchlist'lerinden sembolleri al
+            all_watchlist_items = Watchlist.query.all()
+            watchlist_symbols = {item.symbol for item in all_watchlist_items}
+            
+            # Kullanıcı watchlist'i + temel varlıklar (minimum coverage için)
+            # Eğer watchlist boşsa, en azından major assets'ler analiz edilsin
+            essential_symbols = {'AAPL', 'GOOGL', 'MSFT', 'NVDA', 'TSLA', 'EURUSD', 'BTCUSD', 'ETHUSD'}
+            
+            # Final unique symbols: watchlist + essential + intersect with available
+            unique_symbols = (watchlist_symbols | essential_symbols) & all_available_symbols
+            
+            logger.info(f"📊 Available symbols: {len(all_available_symbols)}")
+            logger.info(f"📝 Watchlist symbols: {len(watchlist_symbols)}")  
+            logger.info(f"🔄 Processing symbols: {len(unique_symbols)}")
+            
+            if len(unique_symbols) < 20:
+                logger.warning(f"⚠️ Az sembol tespit edildi ({len(unique_symbols)}), tüm available symbols kullanılıyor")
+                unique_symbols = all_available_symbols
 
             successful_updates = 0
             
