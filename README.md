@@ -188,4 +188,4 @@ MIT License - Detaylar için LICENSE dosyasına bakın.
 
 ---
 
-**🎯 Framework artık production-ready! Real-time trading decisions için güvenle kullanabilirsiniz.** 
+**🎯 Framework artık production-ready! Real-time trading decisions için güvenle kullanabilirsiniz.** d
