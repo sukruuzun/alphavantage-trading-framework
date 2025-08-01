@@ -217,6 +217,26 @@ def update_data_for_all_users():
                 try:
                     logger.info(f"🔄 {symbol} verisi güncelleniyor...")
                     
+                    # AKILLI FİLTRELEME: Asset type kontrolü (ETF'leri ve desteklenmeyen varlıkları atla)
+                    asset_info = None
+                    with app.app_context():
+                        asset_info = Asset.query.filter_by(symbol=symbol, is_active=True).first()
+                    
+                    # Eğer varlık veritabanında yok veya desteklenmeyen türde ise, atla
+                    if not asset_info:
+                        logger.warning(f"⚠️ {symbol} veritabanında bulunamadı veya pasif. Analiz atlanıyor.")
+                        continue
+                    
+                    # ETF'leri atla (News API desteklemiyor)
+                    if asset_info.asset_type.lower() in ['etf', 'fund']:
+                        logger.warning(f"⚠️ {symbol} bir ETF/Fund. News API desteklemiyor, analiz atlanıyor.")
+                        continue
+                    
+                    # TWTR gibi delisted stocks için ek kontrol
+                    if symbol in ['TWTR', 'FB']:  # Bilinen delisted/renamed stocks
+                        logger.warning(f"⚠️ {symbol} delisted/renamed stock. Analiz atlanıyor.")
+                        continue
+                    
                     # Current price al
                     price = provider.get_current_price(symbol)
                     
@@ -267,12 +287,26 @@ def update_data_for_all_users():
                     time.sleep(2)
                     
                 except Exception as e:
-                    logger.error(f"❌ {symbol} için veri çekilemedi: {e}")
+                    error_message = str(e)
+                    logger.error(f"❌ {symbol} için veri çekilemedi: {error_message}")
+                    
+                    # AKILLI AUTO-DEACTIVATION: "Invalid API call" hatası varsa varlığı pasif yap
+                    if "Invalid API call" in error_message:
+                        try:
+                            with app.app_context():
+                                asset_to_deactivate = Asset.query.filter_by(symbol=symbol).first()
+                                if asset_to_deactivate:
+                                    asset_to_deactivate.is_active = False
+                                    db.session.commit()
+                                    logger.info(f"🔧 {symbol} otomatik pasif yapıldı (Invalid API call nedeniyle)")
+                        except Exception as deactivate_error:
+                            logger.error(f"❌ {symbol} pasif yapılamadı: {deactivate_error}")
+                    
                     # Hata durumunda database'e error kaydet
                     try:
                         cached_data = CachedData.query.filter_by(symbol=symbol).first()
                         if cached_data:
-                            cached_data.error_message = str(e)
+                            cached_data.error_message = error_message
                             cached_data.last_updated = datetime.now()
                             db.session.commit()
                     except Exception as db_error:

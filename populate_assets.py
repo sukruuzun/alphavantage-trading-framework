@@ -100,14 +100,14 @@ def populate_assets():
         {'symbol': 'NET', 'name': 'Cloudflare Inc Class A', 'exchange': 'NYSE', 'asset_type': 'stock'},
         {'symbol': 'DDOG', 'name': 'Datadog Inc Class A', 'exchange': 'NASDAQ', 'asset_type': 'stock'},
         
-        # Tier 4: ETFs (7 varlık)
-        {'symbol': 'SPY', 'name': 'SPDR S&P 500 ETF Trust', 'exchange': 'NYSE ARCA', 'asset_type': 'stock'},
-        {'symbol': 'QQQ', 'name': 'Invesco QQQ Trust Series 1', 'exchange': 'NASDAQ', 'asset_type': 'stock'},
-        {'symbol': 'IWM', 'name': 'iShares Russell 2000 ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'stock'},
-        {'symbol': 'VTI', 'name': 'Vanguard Total Stock Market ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'stock'},
-        {'symbol': 'VOO', 'name': 'Vanguard S&P 500 ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'stock'},
-        {'symbol': 'ARKK', 'name': 'ARK Innovation ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'stock'},
-        {'symbol': 'TQQQ', 'name': 'ProShares UltraPro QQQ', 'exchange': 'NASDAQ', 'asset_type': 'stock'},
+        # Tier 4: ETFs (7 varlık) - FIXED: asset_type = 'etf'
+        {'symbol': 'SPY', 'name': 'SPDR S&P 500 ETF Trust', 'exchange': 'NYSE ARCA', 'asset_type': 'etf'},
+        {'symbol': 'QQQ', 'name': 'Invesco QQQ Trust Series 1', 'exchange': 'NASDAQ', 'asset_type': 'etf'},
+        {'symbol': 'IWM', 'name': 'iShares Russell 2000 ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'etf'},
+        {'symbol': 'VTI', 'name': 'Vanguard Total Stock Market ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'etf'},
+        {'symbol': 'VOO', 'name': 'Vanguard S&P 500 ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'etf'},
+        {'symbol': 'ARKK', 'name': 'ARK Innovation ETF', 'exchange': 'NYSE ARCA', 'asset_type': 'etf'},
+        {'symbol': 'TQQQ', 'name': 'ProShares UltraPro QQQ', 'exchange': 'NASDAQ', 'asset_type': 'etf'},
     ]
     
     with app.app_context():
