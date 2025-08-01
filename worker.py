@@ -220,8 +220,8 @@ def update_data_for_all_users():
                     # Current price al
                     price = provider.get_current_price(symbol)
                     
-                    # Asset type belirle
-                    asset_type = get_asset_type(symbol, AVAILABLE_ASSETS)
+                    # Asset type belirle (database-driven)
+                    asset_type = get_asset_type(symbol, available_assets)
                     
                     # Framework ile analiz yap
                     framework = UniversalTradingBot(provider, asset_type)
