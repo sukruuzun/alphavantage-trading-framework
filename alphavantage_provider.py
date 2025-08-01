@@ -267,11 +267,18 @@ class AlphaVantageProvider(DataProvider):
             else:
                 self.logger.debug("📰 Fetching global sentiment")
                 
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, timeout=20)  # Timeout ekledik
+            response.raise_for_status()  # HTTP hatalarını yakala (4xx, 5xx)
             data = response.json()
             
+            # Alpha Vantage'dan gelen spesifik bir hata mesajı var mı kontrol et
+            if "Error Message" in data or "Information" in data:
+                self.logger.error(f"❌ Alpha Vantage API Hatası (Haber): {data}")
+                return self._empty_sentiment()
+            
             if 'feed' not in data:
-                self.logger.warning("❌ Haber verisi alınamadı")
+                self.logger.warning(f"⚠️ '{symbols_str}' için haber bulunamadı (API boş feed döndürdü).")
+                self.logger.error(f"🚨 RAW API Response: {data}")  # DEBUG: Ham yanıtı logla
                 return self._empty_sentiment()
                 
             news_feed = data['feed']
@@ -332,8 +339,14 @@ class AlphaVantageProvider(DataProvider):
             # self.logger.info(f"📰 {len(news_feed)} haber analiz edildi - Sentiment: {overall_sentiment:.3f}")  # Disabled for Railway
             return result
             
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"❌ Ağ Hatası (Haber): {e}")
+            return self._empty_sentiment()
         except Exception as e:
-            self.logger.error(f"❌ Haber sentiment hatası: {e}")
+            self.logger.warning(f"❌ '{symbols_str}' için haber verisi işlenemedi. Hata: {e}")
+            # EN ÖNEMLİ KISIM: Hatalı yanıtın ham metnini logla
+            if 'response' in locals():
+                self.logger.error(f"🚨 RAW API Response Text: {response.text}")
             return self._empty_sentiment()
                         
     def _empty_sentiment(self) -> Dict:
