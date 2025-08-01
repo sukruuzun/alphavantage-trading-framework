@@ -25,8 +25,9 @@ import logging
 import json
 import os
 from typing import Dict, List, Optional, Tuple
+from sqlalchemy import func
 
-# Import for dynamic correlations
+# Import for dynamic correlations  
 from constants import CORRELATION_CONFIG
 
 class AlphaVantageProvider(DataProvider):
@@ -173,18 +174,18 @@ class AlphaVantageProvider(DataProvider):
                     from_currency=symbol_info['from'],
                     to_currency=symbol_info['to']
                 )
-                price = float(data['5. Exchange Rate'][0])
+                price = float(data['5. Exchange Rate'].iloc[0])
                 
             elif symbol_info['type'] == 'stock':
                 data, _ = self.ts.get_quote_endpoint(symbol=symbol_info['symbol'])
-                price = float(data['05. price'][0])
+                price = float(data['05. price'].iloc[0])
                 
             elif symbol_info['type'] == 'crypto':
                 data, _ = self.crypto.get_digital_currency_exchange_rate(
                     from_currency=symbol_info['symbol'],
                     to_currency=symbol_info['market']
                 )
-                price = float(data['5. Exchange Rate'][0])
+                price = float(data['5. Exchange Rate'].iloc[0])
                 
             else:
                 raise ValueError(f"Bilinmeyen tip: {symbol_info['type']}")
@@ -341,7 +342,7 @@ class AlphaVantageProvider(DataProvider):
                     (CorrelationCache.symbol_1 == primary_symbol) | 
                     (CorrelationCache.symbol_2 == primary_symbol)
                 ).filter(
-                    CorrelationCache.correlation_value.abs() >= CORRELATION_CONFIG['correlation_threshold']
+                    func.abs(CorrelationCache.correlation_value) >= CORRELATION_CONFIG['correlation_threshold']
                 ).all()
 
             if not correlations:

@@ -102,6 +102,23 @@ class CorrelationCache(db.Model):
     def __repr__(self):
         return f'<CorrelationCache {self.symbol_1}-{self.symbol_2}: {self.correlation_value:.3f}>'
 
+class Asset(db.Model):
+    """Filtrelenmiş yüksek kaliteli varlık listesi"""
+    __tablename__ = 'assets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    exchange = db.Column(db.String(50), nullable=False)
+    asset_type = db.Column(db.String(20), nullable=False)  # 'forex', 'stock', 'crypto'
+    ipo_date = db.Column(db.String(20), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Asset {self.symbol}: {self.name} ({self.exchange})>'
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -344,11 +361,11 @@ def init_db():
         db.create_all()
         print("✅ Database initialized!")
 
-# Initialize DB for both development and production - ENABLED for CorrelationCache table creation
+# Initialize DB for both development and production - ENABLED for Asset table creation
 with app.app_context():
     db.create_all()
     print("✅ Database tables created/migrated!")
-# Note: CorrelationCache table added for dynamic correlations
+# Note: Asset table added for smart asset filtering
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
