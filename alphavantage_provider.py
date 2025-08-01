@@ -30,6 +30,9 @@ from sqlalchemy import func
 # Import for dynamic correlations  
 from constants import CORRELATION_CONFIG
 
+# Lazy import için app context
+from functools import wraps
+
 class AlphaVantageProvider(DataProvider):
     """
     🏛️ Alpha Vantage Tam Entegrasyon Provider
@@ -82,34 +85,7 @@ class AlphaVantageProvider(DataProvider):
         # Rate limiting
         self.last_call_time = 0
         
-        # Alpha Vantage sembol mapping
-        self.symbol_mapping = {
-            # Major Forex Pairs
-            "EURUSD": {"from": "EUR", "to": "USD", "type": "forex"},
-            "GBPUSD": {"from": "GBP", "to": "USD", "type": "forex"},
-            "USDJPY": {"from": "USD", "to": "JPY", "type": "forex"},
-            "AUDUSD": {"from": "AUD", "to": "USD", "type": "forex"},
-            "USDCAD": {"from": "USD", "to": "CAD", "type": "forex"},
-            "EURJPY": {"from": "EUR", "to": "JPY", "type": "forex"},
-            "GBPJPY": {"from": "GBP", "to": "JPY", "type": "forex"},
-            "USDCHF": {"from": "USD", "to": "CHF", "type": "forex"},
-            "NZDUSD": {"from": "NZD", "to": "USD", "type": "forex"},
-            
-            # Major US Stocks  
-            "AAPL": {"symbol": "AAPL", "name": "Apple Inc", "type": "stock"},
-            "GOOGL": {"symbol": "GOOGL", "name": "Alphabet Inc", "type": "stock"},
-            "MSFT": {"symbol": "MSFT", "name": "Microsoft Corp", "type": "stock"},
-            "AMZN": {"symbol": "AMZN", "name": "Amazon.com Inc", "type": "stock"},
-            "TSLA": {"symbol": "TSLA", "name": "Tesla Inc", "type": "stock"},
-            "NVDA": {"symbol": "NVDA", "name": "NVIDIA Corp", "type": "stock"},
-            "META": {"symbol": "META", "name": "Meta Platforms", "type": "stock"},
-            
-            # Major Cryptocurrencies
-            "BTCUSD": {"symbol": "BTC", "market": "USD", "type": "crypto"},
-            "ETHUSD": {"symbol": "ETH", "market": "USD", "type": "crypto"},
-            "ADAUSD": {"symbol": "ADA", "market": "USD", "type": "crypto"},
-            "DOTUSD": {"symbol": "DOT", "market": "USD", "type": "crypto"},
-        }
+        # Database-driven sembol mapping (artık statik değil)
         
         # Gerçek spread'ler
         self.spreads = {
@@ -129,9 +105,58 @@ class AlphaVantageProvider(DataProvider):
         
         # Başlatma logları - DISABLED for Railway worker timeout prevention
         # self.logger.info(f"🏛️ Alpha Vantage Provider başlatıldı")
-        # self.logger.info(f"📊 {len(self.symbol_mapping)} enstrüman destekleniyor")
+        # self.logger.info(f"📊 Dynamic asset loading from database")
         # self.logger.info(f"⚡ Plan: {plan_info}")
         # self.logger.info(f"🕐 Cache: {self.cache_duration}s, Rate limit: {self.call_interval}s")
+        
+    def _get_asset_info(self, symbol: str) -> Optional[Dict]:
+        """Database'den asset bilgilerini dinamik olarak çek"""
+        try:
+            # Lazy import to avoid circular imports
+            from web_app import app, Asset
+            
+            with app.app_context():
+                asset = Asset.query.filter_by(symbol=symbol, is_active=True).first()
+                
+                if not asset:
+                    return None
+                
+                # Asset type'a göre mapping bilgileri oluştur
+                if asset.asset_type == 'forex':
+                    # Forex sembolleri için from/to para birimlerini parse et
+                    if len(symbol) == 6:  # EURUSD format
+                        from_curr, to_curr = symbol[:3], symbol[3:]
+                        return {
+                            'from': from_curr,
+                            'to': to_curr, 
+                            'type': 'forex',
+                            'name': asset.name,
+                            'exchange': asset.exchange
+                        }
+                elif asset.asset_type == 'stock':
+                    return {
+                        'symbol': symbol,
+                        'name': asset.name,
+                        'type': 'stock',
+                        'exchange': asset.exchange
+                    }
+                elif asset.asset_type == 'crypto':
+                    # Crypto sembolleri için base currency parse et
+                    if symbol.endswith('USD'):
+                        base_currency = symbol.replace('USD', '')
+                        return {
+                            'symbol': base_currency,
+                            'market': 'USD',
+                            'type': 'crypto',
+                            'name': asset.name,
+                            'exchange': asset.exchange
+                        }
+                
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ Database asset info error for {symbol}: {e}")
+            return None
         
     def _rate_limit(self):
         """Dynamic Rate limiting - Plan tipine göre"""
@@ -156,16 +181,17 @@ class AlphaVantageProvider(DataProvider):
         return key in self.cache and time.time() - self.cache[key]['timestamp'] < self.cache_duration
         
     def get_current_price(self, symbol: str) -> float:
-        """Güncel fiyat al - Premium real-time"""
+        """Güncel fiyat al - Premium real-time (Database-driven)"""
         cache_key = self._get_cache_key('price', symbol)
         
         if self.use_cache and self._is_cache_valid(cache_key):
             return self.cache[cache_key]['data']
             
-        if symbol not in self.symbol_mapping:
-            raise ValueError(f"❌ {symbol} desteklenmiyor")
+        # Database'den asset bilgilerini al
+        symbol_info = self._get_asset_info(symbol)
+        if not symbol_info:
+            raise ValueError(f"❌ {symbol} desteklenmiyor veya database'de bulunamadı")
             
-        symbol_info = self.symbol_mapping[symbol]
         self._rate_limit()
         
         try:
@@ -365,7 +391,8 @@ class AlphaVantageProvider(DataProvider):
                     
             # 3. Sentiment analizi (sadece stocks için)
             sentiment_score = 0
-            if self.symbol_mapping.get(primary_symbol, {}).get('type') == 'stock':
+            primary_asset_info = self._get_asset_info(primary_symbol)
+            if primary_asset_info and primary_asset_info.get('type') == 'stock':
                 try:
                     sentiment_data = self.get_news_sentiment([primary_symbol], limit=15)
                     sentiment_score = sentiment_data['overall_sentiment']
@@ -396,7 +423,8 @@ class AlphaVantageProvider(DataProvider):
     def _sentiment_only_signal(self, primary_symbol: str) -> Signal:
         """Sadece sentiment bazlı sinyal (korelasyon yoksa)"""
         try:
-            if self.symbol_mapping.get(primary_symbol, {}).get('type') == 'stock':
+            primary_asset_info = self._get_asset_info(primary_symbol)
+            if primary_asset_info and primary_asset_info.get('type') == 'stock':
                 sentiment_data = self.get_news_sentiment([primary_symbol], limit=10)
                 sentiment_score = sentiment_data['overall_sentiment']
                 
@@ -456,8 +484,8 @@ class AlphaVantageProvider(DataProvider):
                 }
                 
                 # Market sentiment'e göre tahmin
-                symbol_info = self.symbol_mapping.get(symbol, {})
-                symbol_type = symbol_info.get('type', 'unknown')
+                asset_info = self._get_asset_info(symbol)
+                symbol_type = asset_info.get('type', 'unknown') if asset_info else 'unknown'
                 
                 if symbol_type == 'forex':
                     # USD pairs için basit market sentiment
@@ -485,10 +513,11 @@ class AlphaVantageProvider(DataProvider):
         if self.use_cache and self._is_cache_valid(cache_key):
             return self.cache[cache_key]['data']
             
-        if symbol not in self.symbol_mapping:
-            raise ValueError(f"❌ {symbol} desteklenmiyor")
+        # Database'den asset bilgilerini al
+        symbol_info = self._get_asset_info(symbol)
+        if not symbol_info:
+            raise ValueError(f"❌ {symbol} desteklenmiyor veya database'de bulunamadı")
             
-        symbol_info = self.symbol_mapping[symbol]
         self._rate_limit()
         
         try:
@@ -614,8 +643,15 @@ class AlphaVantageProvider(DataProvider):
         }
         
     def get_available_symbols(self) -> List[str]:
-        """Desteklenen semboller"""
-        return list(self.symbol_mapping.keys())
+        """Desteklenen semboller (Database-driven)"""
+        try:
+            from web_app import app, Asset
+            with app.app_context():
+                active_assets = Asset.query.filter_by(is_active=True).all()
+                return [asset.symbol for asset in active_assets]
+        except Exception as e:
+            self.logger.error(f"❌ Error fetching available symbols: {e}")
+            return []
         
     def get_provider_status(self) -> Dict:
         """Provider durumu - Dynamic plan info"""
@@ -630,7 +666,7 @@ class AlphaVantageProvider(DataProvider):
             'api_key': self.api_key[:8] + '...' if self.api_key else 'None',
             'cache_size': len(self.cache),
             'cache_duration': f'{self.cache_duration}s',
-            'supported_symbols': len(self.symbol_mapping),
+            'supported_symbols': len(self.get_available_symbols()),
             'rate_limit': f'{self.call_interval}s interval',
             'daily_limit': daily_limit,
             'features': [

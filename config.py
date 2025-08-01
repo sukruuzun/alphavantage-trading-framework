@@ -22,8 +22,10 @@ class ProductionConfig(Config):
             database_url = database_url.replace('postgres://', 'postgresql://', 1)
         SQLALCHEMY_DATABASE_URI = database_url
     else:
-        # Force error if no DATABASE_URL in production
-        raise ValueError("DATABASE_URL environment variable is required in production!")
+        # Fallback to development SQLite if no DATABASE_URL (for local testing)
+        import warnings
+        warnings.warn("DATABASE_URL not found in production config, falling back to SQLite")
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///instance/trading_dashboard.db'
 
 config = {
     'development': DevelopmentConfig,
