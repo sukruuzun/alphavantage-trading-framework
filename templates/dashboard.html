@@ -11,35 +11,19 @@
             Hoş geldiniz, {{ username }}!
         </h1>
         <p class="text-muted mb-0">
-            <i class="fas fa-clock me-1"></i>
+            <i class="fas fa-robot me-1"></i>
             Son güncelleme: <span id="last-update">-</span>
             <span class="ms-3">
-                <span class="badge bg-secondary" id="refresh-status">Manuel Mod</span>
+                <span class="badge bg-success" id="refresh-status">
+                    <i class="fas fa-sync fa-spin me-1"></i>Otomatik (5dk)
+                </span>
             </span>
         </p>
     </div>
     <div class="col-md-4 text-md-end">
         <div class="row g-2">
             <div class="col-auto">
-                <select class="form-select form-select-sm" id="refresh-interval">
-                    <option value="0">Manuel</option>
-                    <option value="30">30 saniye</option>
-                    <option value="60">1 dakika</option>
-                    <option value="120">2 dakika</option>
-                    <option value="300">5 dakika</option>
-                </select>
-            </div>
-            <div class="col-auto">
                 <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-success" id="start-auto-refresh" style="display: none;">
-                        <i class="fas fa-play me-1"></i>Başlat
-                    </button>
-                    <button type="button" class="btn btn-outline-danger" id="stop-auto-refresh" style="display: none;">
-                        <i class="fas fa-stop me-1"></i>Durdur
-                    </button>
-                    <button type="button" class="btn btn-outline-primary" id="refresh-data">
-                        <i class="fas fa-sync-alt me-1"></i>Yenile
-                    </button>
                     <a href="{{ url_for('manage_watchlist') }}" class="btn btn-primary">
                         <i class="fas fa-heart me-1"></i>Watchlist
                     </a>
@@ -239,8 +223,7 @@
 
 {% block extra_js %}
 <script>
-let refreshInterval;
-let isAutoRefreshActive = false;
+// Otomatik güncelleme için interval değişkenleri (aşağıda tanımlı)
 
 // Load live data on page load - DISABLED to prevent Railway worker timeout
 document.addEventListener('DOMContentLoaded', function() {
@@ -473,68 +456,36 @@ async function showNews(symbol) {
     }
 }
 
-// Auto refresh with custom interval
-function startAutoRefresh(intervalSeconds = 60) {
-    if (refreshInterval) {
-        clearInterval(refreshInterval);
-    }
-    
-    isAutoRefreshActive = true;
-    
-    refreshInterval = setInterval(() => {
+// Otomatik 5 dakikalık güncelleme sistemi
+let autoRefreshInterval = null;
+let briefingInterval = null;
+
+function startFullAutoRefresh() {
+    // Watchlist verilerini 5 dakikada bir güncelle
+    autoRefreshInterval = setInterval(() => {
+        console.log('🔄 Otomatik veri güncelleme (5dk)');
         loadLiveData();
-    }, intervalSeconds * 1000);
+        updateLastRefreshTime();
+    }, 5 * 60 * 1000); // 5 dakika
     
-    // Update UI
-    document.getElementById('start-auto-refresh').style.display = 'none';
-    document.getElementById('stop-auto-refresh').style.display = 'inline-block';
+    // Briefing ve Market Movers'ı 10 dakikada bir güncelle (cache'den hızlı)
+    briefingInterval = setInterval(() => {
+        console.log('📊 Otomatik briefing güncelleme (10dk)');
+        loadDailyBriefing();
+        loadMarketMovers();
+    }, 10 * 60 * 1000); // 10 dakika
     
-    // Update button states
-    document.getElementById('start-auto-refresh').innerHTML = '<i class="fas fa-play me-1"></i>Başlat';
-    document.getElementById('stop-auto-refresh').innerHTML = `<i class="fas fa-stop me-1"></i>Durdur (${intervalSeconds}s)`;
-    
-    // Update status
-    document.getElementById('refresh-status').className = 'badge bg-success';
-    document.getElementById('refresh-status').innerHTML = `<i class="fas fa-sync fa-spin me-1"></i>Otomatik (${intervalSeconds}s)`;
+    console.log('✅ Otomatik güncelleme sistemi aktif: Veri(5dk), Briefing(10dk)');
 }
 
-// Stop auto refresh
-function stopAutoRefresh() {
-    if (refreshInterval) {
-        clearInterval(refreshInterval);
-        refreshInterval = null;
-    }
-    
-    isAutoRefreshActive = false;
-    
-    // Update UI
-    const intervalSelect = document.getElementById('refresh-interval');
-    if (intervalSelect.value !== '0') {
-        document.getElementById('start-auto-refresh').style.display = 'inline-block';
-    }
-    document.getElementById('stop-auto-refresh').style.display = 'none';
-    
-    // Update status
-    document.getElementById('refresh-status').className = 'badge bg-secondary';
-    document.getElementById('refresh-status').innerHTML = 'Manuel Mod';
+function updateLastRefreshTime() {
+    document.getElementById('last-update').textContent = new Date().toLocaleString('tr-TR');
 }
 
-// Show error message
-function showError(message) {
-    const alert = `
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <i class="fas fa-exclamation-triangle me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>`;
-    
-    const container = document.querySelector('.container');
-    container.insertAdjacentHTML('afterbegin', alert);
-}
-
-// Clear interval on page unload
+// Sayfa kapatılırken interval'ları temizle
 window.addEventListener('beforeunload', function() {
-    stopAutoRefresh();
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (briefingInterval) clearInterval(briefingInterval);
 });
 
 // Daily Briefing Functions
@@ -834,14 +785,23 @@ function formatVolume(volume) {
     return num.toString();
 }
 
-// Event listeners for briefing and market movers
+// Sayfa yüklendiğinde otomatik sistem başlat
 document.addEventListener('DOMContentLoaded', function() {
-    // Load briefing and market movers on page load - Cache'den hızlı servis
+    console.log('🚀 Dashboard yükleniyor - Tam otomatik mod');
+    
+    // İlk yükleme - Tüm verileri getir
     loadDailyBriefing();
     loadMarketMovers();
+    loadLiveData();
+    updateLastRefreshTime();
     
-    // Artık manuel yenileme butonu yok - Worker otomatik günceller
-    console.log('📊 Dashboard yüklendi - Cache\'den veri servisi aktif');
+    // Otomatik güncelleme sistemini başlat
+    startFullAutoRefresh();
+    
+    console.log('✅ Dashboard tam otomatik modda çalışıyor');
+    console.log('   📊 Briefing/Market Movers: Cache\'den anında');
+    console.log('   🔄 Watchlist verileri: 5 dakikada bir');
+    console.log('   📈 Briefing güncellemesi: 10 dakikada bir');
 });
 </script>
 {% endblock %} 

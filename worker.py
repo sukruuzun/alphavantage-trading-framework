@@ -37,6 +37,89 @@ def get_asset_type(symbol, available_assets):
                 return AssetType.CRYPTO
     return AssetType.STOCKS  # Default
 
+def calculate_smart_scores(analysis, symbol):
+    """🧠 Akıllı skorlama sistemi - Fırsatların kalitesini belirler"""
+    try:
+        # Temel değerler
+        signal = analysis.get('final_signal', 'hold')
+        
+        # 1. Confidence Score (0-100)
+        confidence_score = 0.0
+        if signal == 'buy':
+            confidence_score = 75.0  # BUY için base skor
+        elif signal == 'sell':
+            confidence_score = 70.0  # SELL için base skor
+        else:
+            confidence_score = 30.0  # HOLD için düşük skor
+        
+        # 2. Technical Strength (0-100) - Sinyal gücü
+        technical_strength = 50.0  # Base
+        
+        # Kısa ve uzun vadeli sinyaller aynıysa güçlü
+        if (analysis.get('technical_signal_short') == analysis.get('technical_signal_long') and 
+            analysis.get('technical_signal_short') == signal):
+            technical_strength += 25.0
+        
+        # Prediction ile uyumlu ise güçlü
+        if analysis.get('prediction_signal') == signal:
+            technical_strength += 15.0
+            
+        # 3. Volume Score (0-100) - Hacim analizi
+        volume_score = 60.0  # Varsayılan orta seviye
+        
+        # 4. Momentum Score (0-100) - Price momentum
+        momentum_score = 55.0  # Base momentum
+        current_price = analysis.get('current_price', 0)
+        
+        # Fiyat seviyesine göre momentum ayarla
+        if current_price > 0:
+            if signal == 'buy' and current_price > 100:  # Yüksek fiyatlı hisse
+                momentum_score += 10.0
+            elif signal == 'sell' and current_price < 50:  # Düşük fiyatlı hisse
+                momentum_score += 15.0
+        
+        # 5. Risk Level belirleme
+        risk_level = 'medium'  # Default
+        
+        # Crypto'lar yüksek risk
+        from constants import AVAILABLE_ASSETS
+        if symbol in AVAILABLE_ASSETS['crypto']:
+            risk_level = 'high'
+            confidence_score -= 5.0  # Crypto riski
+        
+        # Forex orta risk
+        elif symbol in AVAILABLE_ASSETS['forex']:
+            risk_level = 'medium'
+        
+        # Major stocks düşük risk
+        elif symbol in ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'NVDA']:
+            risk_level = 'low'
+            confidence_score += 10.0  # Blue chip bonus
+        
+        # Skorları 0-100 aralığında tut
+        confidence_score = max(0, min(100, confidence_score))
+        technical_strength = max(0, min(100, technical_strength))
+        volume_score = max(0, min(100, volume_score))
+        momentum_score = max(0, min(100, momentum_score))
+        
+        return {
+            'confidence_score': confidence_score,
+            'technical_strength': technical_strength,
+            'volume_score': volume_score,
+            'momentum_score': momentum_score,
+            'risk_level': risk_level
+        }
+        
+    except Exception as e:
+        logger.warning(f"Smart score calculation error for {symbol}: {e}")
+        return {
+            'confidence_score': 50.0,
+            'technical_strength': 50.0,
+            'volume_score': 50.0,
+            'momentum_score': 50.0,
+            'risk_level': 'medium'
+        }
+
 def get_active_symbols_from_db():
     """Veritabanından aktif olan tüm varlık sembollerini çeker"""
     with app.app_context():
@@ -260,6 +343,9 @@ def update_data_for_all_users():
                         except:
                             sentiment_score = 0
 
+                    # 🧠 Akıllı skorları hesapla
+                    smart_scores = calculate_smart_scores(analysis, symbol)
+
                     # Database cache'e kaydet (Batch operation için prepare)
                     cached_data = CachedData.query.filter_by(symbol=symbol).first()
                     if cached_data:
@@ -267,6 +353,11 @@ def update_data_for_all_users():
                         cached_data.price = price
                         cached_data.signal = analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error' 
                         cached_data.sentiment = sentiment_score
+                        cached_data.confidence_score = smart_scores['confidence_score']
+                        cached_data.technical_strength = smart_scores['technical_strength']
+                        cached_data.volume_score = smart_scores['volume_score']
+                        cached_data.momentum_score = smart_scores['momentum_score']
+                        cached_data.risk_level = smart_scores['risk_level']
                         cached_data.last_updated = datetime.now()
                         cached_data.error_message = None
                     else:
@@ -276,6 +367,11 @@ def update_data_for_all_users():
                             price=price,
                             signal=analysis.get('final_signal', 'hold') if 'error' not in analysis else 'error',
                             sentiment=sentiment_score,
+                            confidence_score=smart_scores['confidence_score'],
+                            technical_strength=smart_scores['technical_strength'],
+                            volume_score=smart_scores['volume_score'],
+                            momentum_score=smart_scores['momentum_score'],
+                            risk_level=smart_scores['risk_level'],
                             last_updated=datetime.now(),
                             error_message=None
                         )
@@ -398,9 +494,8 @@ def generate_daily_briefing():
                 logger.error("❌ API anahtarı bulunamadı - Briefing atlanıyor")
                 return
             
-            # Provider ve framework oluştur
+            # Provider sadece sentiment ve market movers için gerekli
             provider = AlphaVantageProvider(system_api_key, is_premium=True)
-            framework = UniversalTradingBot(provider, AssetType.STOCKS)
             
             # Mevcut briefing'i kontrol et
             existing_briefing = DailyBriefing.query.filter_by(
@@ -439,63 +534,92 @@ def generate_daily_briefing():
             except Exception as e:
                 logger.warning(f"⚠️ Global sentiment hatası: {e}")
             
-            # 2. Tüm Sistem Taraması (Sadece BUY/SELL sinyalleri)
+            # 2. CACHE'DEN SİSTEM TARAMASI - API çağrısı YOK!
             try:
                 from constants import AVAILABLE_ASSETS
                 
-                # Tüm sembolleri topla
-                all_symbols = []
-                all_symbols.extend(AVAILABLE_ASSETS['stocks'])
-                all_symbols.extend(AVAILABLE_ASSETS['forex'])
-                all_symbols.extend(AVAILABLE_ASSETS['crypto'])
+                logger.info("📊 Cache'den sistem taraması başlıyor...")
                 
-                # 30 rastgele sembol analiz et (briefing için daha kapsamlı)
-                random.shuffle(all_symbols)
-                symbols_to_analyze = all_symbols[:30]
+                # CachedData'dan tüm güncel verileri al
+                cached_data = CachedData.query.all()
                 
-                logger.info(f"🔍 {len(symbols_to_analyze)} sembol analiz ediliyor...")
-                
-                for symbol in symbols_to_analyze:
-                    try:
-                        analysis = framework.analyze_symbol(symbol)
-                        briefing_data['total_analyzed'] += 1
-                        
-                        signal = analysis.get('final_signal', 'hold')
-                        
-                        # Sadece BUY/SELL sinyalleri kaydet (HOLD'ları atla)
-                        if signal in ['buy', 'sell']:
-                            # Asset tipini belirle
-                            asset_type = 'Stock'
-                            if symbol in AVAILABLE_ASSETS['forex']:
-                                asset_type = 'Forex'
-                            elif symbol in AVAILABLE_ASSETS['crypto']:
-                                asset_type = 'Crypto'
-                            
-                            briefing_data['top_opportunities'].append({
-                                'symbol': symbol,
-                                'signal': signal.upper(),
-                                'price': analysis.get('current_price', 0),
-                                'asset_type': asset_type,
-                                'confidence': 'Yüksek'
-                            })
-                            
-                            if signal == 'buy':
-                                briefing_data['buy_signals_count'] += 1
-                            else:
-                                briefing_data['sell_signals_count'] += 1
-                            
-                            # En fazla 15 fırsat kaydet
-                            if len(briefing_data['top_opportunities']) >= 15:
-                                break
+                if not cached_data:
+                    logger.warning("⚠️ Cache'de veri yok - Normal worker çalışmıyor olabilir")
+                    briefing_data['total_analyzed'] = 0
+                else:
+                    logger.info(f"📈 Cache'de {len(cached_data)} sembol verisi bulundu")
+                    
+                    briefing_data['total_analyzed'] = len(cached_data)
+                    
+                    # 🧠 AKILLI SIRALAMA: En iyi fırsatları seç
+                    buy_opportunities = []
+                    sell_opportunities = []
+                    
+                    # BUY/SELL sinyallerini ayır ve skorla
+                    for cached_item in cached_data:
+                        try:
+                            if cached_item.signal in ['buy', 'sell']:
+                                # Asset tipini belirle
+                                asset_type = 'Stock'
+                                if cached_item.symbol in AVAILABLE_ASSETS['forex']:
+                                    asset_type = 'Forex'
+                                elif cached_item.symbol in AVAILABLE_ASSETS['crypto']:
+                                    asset_type = 'Crypto'
                                 
-                    except Exception as e:
-                        logger.warning(f"Analiz hatası {symbol}: {e}")
-                        continue
-                
-                logger.info(f"✅ {briefing_data['total_analyzed']} sembol analiz edildi, {len(briefing_data['top_opportunities'])} fırsat bulundu")
+                                # Toplam kalite skoru hesapla (0-100)
+                                quality_score = (
+                                    cached_item.confidence_score * 0.4 +  # %40 confidence
+                                    cached_item.technical_strength * 0.3 +  # %30 technical
+                                    cached_item.momentum_score * 0.2 +     # %20 momentum
+                                    cached_item.volume_score * 0.1         # %10 volume
+                                )
+                                
+                                # Risk ayarlaması
+                                if cached_item.risk_level == 'low':
+                                    quality_score += 5.0  # Düşük risk bonus
+                                elif cached_item.risk_level == 'high':
+                                    quality_score -= 5.0  # Yüksek risk cezası
+                                
+                                opportunity = {
+                                    'symbol': cached_item.symbol,
+                                    'signal': cached_item.signal.upper(),
+                                    'price': cached_item.price,
+                                    'asset_type': asset_type,
+                                    'confidence_score': cached_item.confidence_score,
+                                    'technical_strength': cached_item.technical_strength,
+                                    'quality_score': round(quality_score, 2),
+                                    'risk_level': cached_item.risk_level,
+                                    'recommendation_reason': _generate_recommendation_reason(cached_item)
+                                }
+                                
+                                if cached_item.signal == 'buy':
+                                    buy_opportunities.append(opportunity)
+                                    briefing_data['buy_signals_count'] += 1
+                                else:
+                                    sell_opportunities.append(opportunity)
+                                    briefing_data['sell_signals_count'] += 1
+                                    
+                        except Exception as e:
+                            logger.warning(f"Cache okuma hatası {cached_item.symbol}: {e}")
+                            continue
+                    
+                    # En iyi fırsatları seç (kalite skoruna göre sırala)
+                    buy_opportunities.sort(key=lambda x: x['quality_score'], reverse=True)
+                    sell_opportunities.sort(key=lambda x: x['quality_score'], reverse=True)
+                    
+                    # En iyi 8 BUY + 7 SELL al (toplam 15)
+                    best_buys = buy_opportunities[:8]
+                    best_sells = sell_opportunities[:7]
+                    
+                    # Briefing data'ya ekle
+                    briefing_data['top_opportunities'] = best_buys + best_sells
+                    
+                    logger.info(f"🎯 En iyi fırsatlar seçildi: {len(best_buys)} BUY, {len(best_sells)} SELL")
+                    
+                    logger.info(f"✅ Cache'den {briefing_data['total_analyzed']} sembol okundu, {len(briefing_data['top_opportunities'])} fırsat bulundu")
                 
             except Exception as e:
-                logger.error(f"❌ Sistem tarama hatası: {e}")
+                logger.error(f"❌ Cache okuma hatası: {e}")
             
             # 3. Market Movers (Alpha Intelligence)
             try:
@@ -575,6 +699,40 @@ def generate_daily_briefing():
             db.session.rollback()
             return None
 
+def _generate_recommendation_reason(cached_item):
+    """🎯 Öneri nedeni oluştur"""
+    try:
+        reasons = []
+        
+        # Confidence-based reasons
+        if cached_item.confidence_score >= 85:
+            reasons.append("Çok yüksek güven skoru")
+        elif cached_item.confidence_score >= 75:
+            reasons.append("Yüksek güven skoru")
+        
+        # Technical strength
+        if cached_item.technical_strength >= 80:
+            reasons.append("Güçlü teknik sinyaller")
+        elif cached_item.technical_strength >= 70:
+            reasons.append("Olumlu teknik görünüm")
+        
+        # Risk level
+        if cached_item.risk_level == 'low':
+            reasons.append("Düşük risk profili")
+        
+        # Momentum
+        if cached_item.momentum_score >= 70:
+            reasons.append("Güçlü momentum")
+        
+        # Default reason
+        if not reasons:
+            reasons.append("Sistem analizi önerisi")
+        
+        return ", ".join(reasons[:2])  # En fazla 2 neden
+        
+    except:
+        return "Sistem analizi önerisi"
+
 def enhanced_worker_main():
     """🚀 Gelişmiş Worker - Saatlik briefing ile"""
     logger.info("🚀 Gelişmiş Background Worker başlatılıyor...")
@@ -594,7 +752,7 @@ def enhanced_worker_main():
             
             # Normal veri güncelleme
             logger.info("🔄 Veri güncelleme başlıyor...")
-            update_cached_data()
+            update_data_for_all_users()
             
             # Bekleme
             sleep_minutes = API_CONFIG['worker_sleep_interval'] // 60

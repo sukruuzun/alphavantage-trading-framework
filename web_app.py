@@ -67,12 +67,20 @@ class Watchlist(db.Model):
     added_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class CachedData(db.Model):
-    """Background worker'ın güncelediği cache verisi"""
+    """Background worker'ın güncelediği cache verisi - Akıllı sıralama için genişletildi"""
     id = db.Column(db.Integer, primary_key=True)
     symbol = db.Column(db.String(20), unique=True, nullable=False)
     price = db.Column(db.Float, nullable=False, default=0.0)
     signal = db.Column(db.String(20), nullable=False, default='hold')
     sentiment = db.Column(db.Float, nullable=True)
+    
+    # Akıllı sıralama için yeni alanlar
+    confidence_score = db.Column(db.Float, default=0.0)  # 0-100 arası güven skoru
+    technical_strength = db.Column(db.Float, default=0.0)  # Teknik analiz gücü
+    volume_score = db.Column(db.Float, default=0.0)  # Volume analizi
+    momentum_score = db.Column(db.Float, default=0.0)  # Momentum gücü
+    risk_level = db.Column(db.String(10), default='medium')  # low, medium, high
+    
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
     error_message = db.Column(db.Text, nullable=True)
 
@@ -82,6 +90,11 @@ class CachedData(db.Model):
             'price': self.price,
             'signal': self.signal,
             'sentiment': self.sentiment,
+            'confidence_score': self.confidence_score,
+            'technical_strength': self.technical_strength,
+            'volume_score': self.volume_score,
+            'momentum_score': self.momentum_score,
+            'risk_level': self.risk_level,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'error': self.error_message
         }
