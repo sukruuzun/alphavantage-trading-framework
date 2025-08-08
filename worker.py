@@ -175,10 +175,10 @@ def update_data_for_all_users():
                 logger.warning("❌ Hiç kullanıcı bulunamadı. Bekleniyor...")
                 return
 
-            # Merkezi sistem API key kullan
-            system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY')
+            # Merkezi sistem API key kullan (fallback to ALPHA_VANTAGE_KEY)
+            system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY') or os.getenv('ALPHA_VANTAGE_KEY')
             if not system_api_key:
-                logger.error("❌ SYSTEM_ALPHA_VANTAGE_KEY environment variable bulunamadı!")
+                logger.error("❌ API anahtarı bulunamadı! (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)")
                 return
                 
             provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
@@ -350,7 +350,7 @@ def main():
             # Korelasyon güncellemesi kontrolü (günde bir kez)
             if time.time() - last_correlation_update > correlation_interval:
                 logger.info("🔄 Korelasyon güncelleme zamanı geldi...")
-                system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY')
+                system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY') or os.getenv('ALPHA_VANTAGE_KEY')
                 
                 if system_api_key:
                     provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
@@ -363,7 +363,7 @@ def main():
                         logger.error("❌ Korelasyon güncelleme başarısız - 1 saat sonra yeniden denenecek")
                         last_correlation_update = time.time() - correlation_interval + 3600  # Retry in 1 hour
                 else:
-                    logger.error("❌ SYSTEM_ALPHA_VANTAGE_KEY bulunamadı - korelasyon güncellenemiyor")
+                    logger.error("❌ API anahtarı bulunamadı - korelasyon güncellenemiyor (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)")
             
             # Normal veri güncelleme (configurable interval)
             update_data_for_all_users()

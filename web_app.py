@@ -325,9 +325,9 @@ def get_market_movers():
     try:
         from alpha_intelligence_provider import AlphaIntelligenceProvider
         
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
         if not system_api_key:
-            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
         
         provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
         market_data = provider.get_top_gainers_losers()
@@ -345,9 +345,9 @@ def get_insider_activity(symbol):
     try:
         from alpha_intelligence_provider import AlphaIntelligenceProvider
         
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
         if not system_api_key:
-            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
         
         provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
         insider_data = provider.get_insider_transactions(symbol.upper())
@@ -365,9 +365,9 @@ def get_earnings_calendar():
     try:
         from alpha_intelligence_provider import AlphaIntelligenceProvider
         
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
         if not system_api_key:
-            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
         
         horizon = request.args.get('horizon', '3month')  # 3month, 6month, 12month
         
@@ -388,9 +388,9 @@ def test_api_key():
         from alphavantage_provider import AlphaVantageProvider
         import requests
         
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
         if not system_api_key:
-            return jsonify({'error': 'SYSTEM_ALPHA_VANTAGE_KEY environment variable bulunamadı'}), 500
+            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
         
         # Test basic API call
         test_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey={system_api_key}"
@@ -470,10 +470,10 @@ def get_symbol_news(symbol):
         # Lazy import to prevent Railway worker timeout
         from alphavantage_provider import AlphaVantageProvider
         
-        # Merkezi sistem API key kullan
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        # Merkezi sistem API key kullan (fallback to ALPHA_VANTAGE_KEY)
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
         if not system_api_key:
-            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
         
         # DÜZELTME: API key validation ve proper error handling
         try:
