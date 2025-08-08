@@ -314,6 +314,138 @@ def live_data():
         logging.error(f"Live data error: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/market-movers')
+@login_required
+def get_market_movers():
+    """📈 Market Movers - Top Gainers & Losers (Premium Feature)"""
+    try:
+        from alpha_intelligence_provider import AlphaIntelligenceProvider
+        
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+        
+        provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
+        market_data = provider.get_top_gainers_losers()
+        
+        return jsonify(market_data)
+        
+    except Exception as e:
+        logging.error(f"Market movers error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/insider/<symbol>')
+@login_required
+def get_insider_activity(symbol):
+    """🏛️ Insider Trading Activity (Premium Feature)"""
+    try:
+        from alpha_intelligence_provider import AlphaIntelligenceProvider
+        
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+        
+        provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
+        insider_data = provider.get_insider_transactions(symbol.upper())
+        
+        return jsonify(insider_data)
+        
+    except Exception as e:
+        logging.error(f"Insider activity error for {symbol}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/earnings-calendar')
+@login_required
+def get_earnings_calendar():
+    """📅 Earnings Calendar (Premium Feature)"""
+    try:
+        from alpha_intelligence_provider import AlphaIntelligenceProvider
+        
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
+        
+        horizon = request.args.get('horizon', '3month')  # 3month, 6month, 12month
+        
+        provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
+        earnings_data = provider.get_earnings_calendar(horizon)
+        
+        return jsonify(earnings_data)
+        
+    except Exception as e:
+        logging.error(f"Earnings calendar error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test-api-key')
+@login_required
+def test_api_key():
+    """🔑 API Key Test & Validation"""
+    try:
+        from alphavantage_provider import AlphaVantageProvider
+        import requests
+        
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'SYSTEM_ALPHA_VANTAGE_KEY environment variable bulunamadı'}), 500
+        
+        # Test basic API call
+        test_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey={system_api_key}"
+        
+        response = requests.get(test_url, timeout=10)
+        data = response.json()
+        
+        # Analyze response
+        if "Error Message" in data:
+            return jsonify({
+                'api_key_status': 'invalid',
+                'error': data["Error Message"],
+                'api_key_preview': f"{system_api_key[:8]}...",
+                'suggestion': 'API key geçersiz veya yanlış format'
+            }), 400
+        
+        if "Information" in data:
+            if "call frequency" in data["Information"].lower():
+                return jsonify({
+                    'api_key_status': 'rate_limited',
+                    'error': data["Information"],
+                    'api_key_preview': f"{system_api_key[:8]}...",
+                    'suggestion': 'Free plan rate limit aşıldı - Premium plan gerekli'
+                }), 429
+        
+        if "Global Quote" in data:
+            quote_data = data["Global Quote"]
+            return jsonify({
+                'api_key_status': 'valid',
+                'plan_type': 'premium' if response.elapsed.total_seconds() < 2 else 'free',
+                'api_key_preview': f"{system_api_key[:8]}...",
+                'test_symbol': 'AAPL',
+                'test_price': quote_data.get('05. price', 'N/A'),
+                'response_time_ms': round(response.elapsed.total_seconds() * 1000, 2),
+                'suggestion': 'API key çalışıyor!'
+            })
+        
+        return jsonify({
+            'api_key_status': 'unknown_response',
+            'raw_response': data,
+            'api_key_preview': f"{system_api_key[:8]}...",
+            'suggestion': 'Beklenmeyen API yanıtı'
+        })
+        
+    except requests.exceptions.Timeout:
+        return jsonify({
+            'api_key_status': 'timeout',
+            'error': 'API timeout - network problemi olabilir',
+            'suggestion': 'İnternet bağlantısını kontrol edin'
+        }), 408
+        
+    except Exception as e:
+        logging.error(f"API key test error: {e}")
+        return jsonify({
+            'api_key_status': 'error',
+            'error': str(e),
+            'suggestion': 'Beklenmeyen hata oluştu'
+        }), 500
+
 @app.route('/api/news/<symbol>')
 @login_required
 def get_symbol_news(symbol):
@@ -338,19 +470,44 @@ def get_symbol_news(symbol):
         system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY')
         if not system_api_key:
             return jsonify({'error': 'Sistem API anahtarı bulunamadı'}), 500
-            
-        provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
-        news_data = provider.get_news_sentiment([symbol], limit=10)
         
-        return jsonify({
-            'symbol': symbol,
-            'overall_sentiment': news_data.get('overall_sentiment', 0),
-            'news_count': news_data.get('news_count', 0),
-            'top_news': news_data.get('top_news', [])[:5]
-        })
+        # DÜZELTME: API key validation ve proper error handling
+        try:
+            provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
+            news_data = provider.get_news_sentiment([symbol], limit=10)
+            
+            # API response validation
+            if 'error' in news_data:
+                logging.error(f"Alpha Vantage API Error for {symbol}: {news_data['error']}")
+                return jsonify({
+                    'symbol': symbol,
+                    'error': f'API hatası: {news_data["error"]}',
+                    'overall_sentiment': 0,
+                    'news_count': 0,
+                    'top_news': []
+                }), 400
+            
+            return jsonify({
+                'symbol': symbol,
+                'overall_sentiment': news_data.get('overall_sentiment', 0),
+                'news_count': news_data.get('news_count', 0),
+                'top_news': news_data.get('top_news', [])[:5],
+                'last_updated': news_data.get('last_updated', 'N/A')
+            })
+            
+        except ValueError as api_error:
+            logging.error(f"API Value Error for {symbol}: {api_error}")
+            return jsonify({
+                'symbol': symbol,
+                'error': f'API çağrı hatası: {str(api_error)}',
+                'overall_sentiment': 0,
+                'news_count': 0,
+                'top_news': []
+            }), 400
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Unexpected error in get_symbol_news for {symbol}: {e}")
+        return jsonify({'error': f'Beklenmeyen hata: {str(e)}'}), 500
 
 # Initialize database
 def init_db():

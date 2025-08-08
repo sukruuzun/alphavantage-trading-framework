@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import func
 
 # Import for dynamic correlations  
-from constants import CORRELATION_CONFIG
+from constants import CORRELATION_CONFIG, API_CONFIG
 
 # Lazy import için app context
 from functools import wraps
@@ -288,32 +288,53 @@ class AlphaVantageProvider(DataProvider):
         self._rate_limit()
         
         try:
-            # Alpha Vantage News & Sentiment API
+            # Alpha Vantage News & Sentiment API (Official Documentation)
             url = "https://www.alphavantage.co/query"
             params = {
                 'function': 'NEWS_SENTIMENT',
                 'apikey': self.api_key,
-                'limit': limit
+                'limit': min(limit, 1000)  # API max limit is 1000
             }
             
             if symbols:
+                # DÜZELTME: Alpha Vantage docs'a göre 'tickers' parametresi doğru
                 params['tickers'] = ','.join(symbols)
+                # Premium plan için ek parametreler
+                if self.is_premium:
+                    params['sort'] = 'LATEST'  # Premium: Sort by latest
+                    params['time_from'] = (datetime.now() - timedelta(days=7)).strftime('%Y%m%dT%H%M')
                 self.logger.debug(f"📰 Fetching sentiment for: {symbols}")
             else:
                 self.logger.debug("📰 Fetching global sentiment")
                 
-            response = requests.get(url, params=params, timeout=20)  # Timeout ekledik
+            response = requests.get(url, params=params, timeout=API_CONFIG['timeout'])
             response.raise_for_status()  # HTTP hatalarını yakala (4xx, 5xx)
             data = response.json()
             
-            # Alpha Vantage'dan gelen spesifik bir hata mesajı var mı kontrol et
-            if "Error Message" in data or "Information" in data:
-                self.logger.error(f"❌ Alpha Vantage API Hatası (Haber): {data}")
+            # Alpha Vantage API error handling (based on official documentation)
+            if "Error Message" in data:
+                error_msg = data["Error Message"]
+                self.logger.error(f"❌ Alpha Vantage API Error: {error_msg}")
+                if "Invalid API call" in error_msg:
+                    raise ValueError(f"Invalid API call for {symbols_str}: {error_msg}")
+                elif "API call frequency" in error_msg:
+                    raise ValueError(f"Rate limit exceeded: {error_msg}")
+                else:
+                    raise ValueError(f"API Error: {error_msg}")
+            
+            if "Information" in data:
+                info_msg = data["Information"]
+                self.logger.warning(f"⚠️ Alpha Vantage API Info: {info_msg}")
+                if "call frequency" in info_msg.lower():
+                    raise ValueError(f"Rate limit: {info_msg}")
                 return self._empty_sentiment()
             
             if 'feed' not in data:
                 self.logger.warning(f"⚠️ '{symbols_str}' için haber bulunamadı (API boş feed döndürdü).")
-                self.logger.error(f"🚨 RAW API Response: {data}")  # DEBUG: Ham yanıtı logla
+                self.logger.debug(f"🚨 RAW API Response keys: {list(data.keys())}")
+                # Check if it's a valid response but with no news
+                if 'items' in data and len(data['items']) == 0:
+                    return self._empty_sentiment()
                 return self._empty_sentiment()
                 
             news_feed = data['feed']
