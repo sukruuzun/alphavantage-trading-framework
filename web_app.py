@@ -450,6 +450,159 @@ def test_api_key():
             'suggestion': 'Beklenmeyen hata oluştu'
         }), 500
 
+@app.route('/api/daily-briefing')
+@login_required
+def get_daily_briefing():
+    """🎯 Günlük Piyasa Brifingi API Endpoint"""
+    try:
+        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
+        if not system_api_key:
+            return jsonify({'error': 'API anahtarı bulunamadı'}), 500
+            
+        # AlphaVantage provider ile briefing oluştur
+        from alphavantage_provider import AlphaVantageProvider
+        from universal_trading_framework import UniversalTradingBot, AssetType
+        from datetime import datetime
+        import time
+        
+        provider = AlphaVantageProvider(system_api_key, is_premium=True)
+        framework = UniversalTradingBot(provider, AssetType.STOCKS)
+        
+        # Briefing verilerini topla
+        briefing_data = {
+            'timestamp': datetime.now().isoformat(),
+            'global_sentiment': None,
+            'top_opportunities': [],
+            'market_summary': {},
+            'recommendations': [],
+            'risk_analysis': {}
+        }
+        
+        # 1. Global Sentiment
+        try:
+            sentiment_data = provider.get_news_sentiment(limit=50)
+            briefing_data['global_sentiment'] = {
+                'overall_score': sentiment_data.get('overall_sentiment', 0),
+                'news_count': sentiment_data.get('news_count', 0),
+                'status': 'Pozitif' if sentiment_data.get('overall_sentiment', 0) > 0.1 else 
+                         'Negatif' if sentiment_data.get('overall_sentiment', 0) < -0.1 else 'Nötr'
+            }
+        except Exception as e:
+            logging.warning(f"Global sentiment hatası: {e}")
+            briefing_data['global_sentiment'] = {'status': 'Veri yok', 'overall_score': 0}
+        
+        # 2. TÜM SİSTEM TARAMASI - Tüm asset'leri analiz et
+        try:
+            from constants import AVAILABLE_ASSETS
+            import random
+            
+            # Tüm sistemdeki enstrümanları topla
+            all_symbols = []
+            all_symbols.extend(AVAILABLE_ASSETS['stocks'])  # ~60 hisse
+            all_symbols.extend(AVAILABLE_ASSETS['forex'])   # 9 forex
+            all_symbols.extend(AVAILABLE_ASSETS['crypto'])  # 4 crypto
+            
+            # Performans için randomize et ve ilk 15-20'sini analiz et
+            random.shuffle(all_symbols)
+            symbols_to_analyze = all_symbols[:20]  # İlk 20 sembol (hız için)
+            
+            logging.info(f"📊 Günlük briefing: {len(symbols_to_analyze)} sembol analiz ediliyor...")
+            
+            analyzed_count = 0
+            for symbol in symbols_to_analyze:
+                try:
+                    analysis = framework.analyze_symbol(symbol)
+                    analyzed_count += 1
+                    
+                    # BUY/SELL sinyali varsa fırsat listesine ekle
+                    if analysis.get('final_signal') in ['buy', 'sell']:
+                        # Asset tipini belirle
+                        asset_type = 'Stock'
+                        if symbol in AVAILABLE_ASSETS['forex']:
+                            asset_type = 'Forex'
+                        elif symbol in AVAILABLE_ASSETS['crypto']:
+                            asset_type = 'Crypto'
+                            
+                        briefing_data['top_opportunities'].append({
+                            'symbol': symbol,
+                            'signal': analysis.get('final_signal', 'hold').upper(),
+                            'price': analysis.get('current_price', 0),
+                            'asset_type': asset_type,
+                            'confidence': 'Yüksek' if analysis.get('final_signal') != 'hold' else 'Düşük'
+                        })
+                        
+                        # En fazla 10 fırsat göster (UI için)
+                        if len(briefing_data['top_opportunities']) >= 10:
+                            break
+                            
+                except Exception as e:
+                    logging.warning(f"Sembol analiz hatası {symbol}: {e}")
+                    continue
+            
+            logging.info(f"✅ Günlük briefing tamamlandı: {analyzed_count} sembol, {len(briefing_data['top_opportunities'])} fırsat bulundu")
+                    
+        except Exception as e:
+            logging.warning(f"Sistem tarama hatası: {e}")
+        
+        # 3. Market Summary
+        briefing_data['market_summary'] = {
+            'total_symbols_in_system': len(AVAILABLE_ASSETS['stocks']) + len(AVAILABLE_ASSETS['forex']) + len(AVAILABLE_ASSETS['crypto']),
+            'analyzed_symbols': analyzed_count if 'analyzed_count' in locals() else 0,
+            'opportunities_found': len(briefing_data['top_opportunities']),
+            'buy_signals': len([op for op in briefing_data['top_opportunities'] if op['signal'] == 'BUY']),
+            'sell_signals': len([op for op in briefing_data['top_opportunities'] if op['signal'] == 'SELL']),
+            'market_mood': briefing_data['global_sentiment']['status'],
+            'asset_breakdown': {
+                'stocks': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Stock']),
+                'forex': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Forex']),
+                'crypto': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Crypto'])
+            }
+        }
+        
+        # 4. Akıllı Öneriler - Sistem taraması sonuçlarına göre
+        sentiment_score = briefing_data['global_sentiment']['overall_score']
+        buy_count = briefing_data['market_summary']['buy_signals']
+        sell_count = briefing_data['market_summary']['sell_signals']
+        total_opportunities = briefing_data['market_summary']['opportunities_found']
+        analyzed = briefing_data['market_summary']['analyzed_symbols']
+        
+        # Ana strateji önerisi
+        if sentiment_score > 0.1 and buy_count > sell_count:
+            briefing_data['recommendations'].append("🟢 Pozitif piyasa sentiment - Alım fırsatlarını değerlendirin")
+        elif sentiment_score < -0.1 and sell_count > buy_count:
+            briefing_data['recommendations'].append("🔴 Negatif piyasa sentiment - Risk yönetimi yapın")
+        else:
+            briefing_data['recommendations'].append("🟡 Karışık sinyaller - Temkinli yaklaşın")
+        
+        # Fırsat yoğunluğu analizi
+        if total_opportunities == 0:
+            briefing_data['recommendations'].append("⏸️ Sistem taramasında net sinyal yok - Bekleyici pozisyon alın")
+        elif total_opportunities <= 2:
+            briefing_data['recommendations'].append("📊 Az sayıda fırsat - Seçici davranın")
+        elif total_opportunities >= 5:
+            briefing_data['recommendations'].append("🎯 Çok sayıda fırsat - Portföy çeşitliliği yapın")
+        
+        # Asset sınıfı önerileri
+        asset_breakdown = briefing_data['market_summary']['asset_breakdown']
+        if asset_breakdown['stocks'] > asset_breakdown['forex'] + asset_breakdown['crypto']:
+            briefing_data['recommendations'].append("📈 Hisse senetlerinde daha fazla aktivite")
+        elif asset_breakdown['forex'] > 0:
+            briefing_data['recommendations'].append("💱 Forex piyasasında hareket var")
+        elif asset_breakdown['crypto'] > 0:
+            briefing_data['recommendations'].append("₿ Kripto piyasasında fırsatlar mevcut")
+        
+        # Sistem kapsamı bilgisi
+        briefing_data['recommendations'].append(f"🔍 {analyzed} sembol analiz edildi (Sistem: {briefing_data['market_summary']['total_symbols_in_system']} enstrüman)")
+        
+        return jsonify(briefing_data)
+        
+    except Exception as e:
+        logging.error(f"Daily briefing error: {e}")
+        return jsonify({
+            'error': 'Günlük briefing oluşturulamadı',
+            'details': str(e)
+        }), 500
+
 @app.route('/api/news/<symbol>')
 @login_required
 def get_symbol_news(symbol):

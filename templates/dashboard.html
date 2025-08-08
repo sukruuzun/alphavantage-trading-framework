@@ -76,6 +76,66 @@
 </div>
 {% endif %}
 
+<!-- Daily Market Briefing -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-bullhorn me-2"></i>
+                    Günün Piyasa Brifingi
+                    <span class="badge bg-light text-primary ms-2" id="briefing-status">Yükleniyor...</span>
+                </h5>
+            </div>
+            <div class="card-body" id="briefing-content">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                    <p class="mt-2 text-muted">Günün analizi hazırlanıyor...</p>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                <small>
+                    <i class="fas fa-clock me-1"></i>
+                    Son güncelleme: <span id="briefing-last-update">-</span>
+                    <button class="btn btn-outline-primary btn-sm float-end" id="refresh-briefing">
+                        <i class="fas fa-sync me-1"></i>Yenile
+                    </button>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Market Movers - Top Gainers & Losers -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-rocket me-2"></i>
+                    Market Movers - En Çok Yükselenler & Düşenler
+                    <span class="badge bg-light text-success ms-2" id="movers-status">Yükleniyor...</span>
+                </h5>
+            </div>
+            <div class="card-body" id="market-movers-content">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                    <p class="mt-2 text-muted">Market movers yükleniyor...</p>
+                </div>
+            </div>
+            <div class="card-footer text-muted">
+                <small>
+                    <i class="fas fa-clock me-1"></i>
+                    Son güncelleme: <span id="movers-last-update">-</span>
+                    <button class="btn btn-outline-success btn-sm float-end" id="refresh-movers">
+                        <i class="fas fa-sync me-1"></i>Yenile
+                    </button>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Live Data Display -->
 <div id="live-data-container">
     <!-- Forex Section -->
@@ -477,6 +537,332 @@ function showError(message) {
 // Clear interval on page unload
 window.addEventListener('beforeunload', function() {
     stopAutoRefresh();
+});
+
+// Daily Briefing Functions
+async function loadDailyBriefing() {
+    try {
+        document.getElementById('briefing-status').textContent = 'Yükleniyor...';
+        document.getElementById('briefing-status').className = 'badge bg-warning text-dark ms-2';
+        
+        const response = await fetch('/api/daily-briefing');
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Briefing yüklenemedi');
+        }
+        
+        // Update content
+        displayBriefingData(data);
+        
+        // Update status
+        document.getElementById('briefing-status').textContent = 'Güncel';
+        document.getElementById('briefing-status').className = 'badge bg-success ms-2';
+        
+        // Update timestamp
+        document.getElementById('briefing-last-update').textContent = new Date().toLocaleString('tr-TR');
+        
+    } catch (error) {
+        console.error('Briefing error:', error);
+        document.getElementById('briefing-content').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Günün brifingi yüklenirken hata: ${error.message}
+            </div>`;
+        
+        document.getElementById('briefing-status').textContent = 'Hata';
+        document.getElementById('briefing-status').className = 'badge bg-danger ms-2';
+    }
+}
+
+function displayBriefingData(data) {
+    const sentiment = data.global_sentiment || {};
+    const summary = data.market_summary || {};
+    const opportunities = data.top_opportunities || [];
+    const recommendations = data.recommendations || [];
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">
+                            <i class="fas fa-globe me-1"></i>
+                            Global Sentiment
+                        </h6>
+                        <h4 class="mb-0 ${getSentimentClass(sentiment.overall_score)}">
+                            ${sentiment.status || 'Bilinmiyor'}
+                        </h4>
+                        <small class="text-muted">${sentiment.news_count || 0} haber analizi</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">
+                            <i class="fas fa-chart-line me-1"></i>
+                            Sinyal Özeti
+                        </h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <span class="text-success fw-bold">${summary.buy_signals || 0}</span>
+                                <br><small>ALIŞ</small>
+                            </div>
+                            <div class="col-6">
+                                <span class="text-danger fw-bold">${summary.sell_signals || 0}</span>
+                                <br><small>SATIŞ</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">
+                            <i class="fas fa-search me-1"></i>
+                            Sistem Taraması
+                        </h6>
+                        <h4 class="mb-0 text-info">
+                            ${summary.analyzed_symbols || 0}/${summary.total_symbols_in_system || 73}
+                        </h4>
+                        <small class="text-muted">${summary.opportunities_found || 0} fırsat bulundu</small>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    
+    // Fırsatlar bölümü
+    if (opportunities.length > 0) {
+        html += `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6><i class="fas fa-star me-1"></i>Günün Fırsatları:</h6>
+                    <div class="row">`;
+        
+        opportunities.forEach(opp => {
+            const assetIcon = opp.asset_type === 'Stock' ? 'fas fa-chart-line' : 
+                             opp.asset_type === 'Forex' ? 'fas fa-exchange-alt' : 
+                             opp.asset_type === 'Crypto' ? 'fab fa-bitcoin' : 'fas fa-coins';
+            
+            html += `
+                <div class="col-md-4 mb-2">
+                    <div class="card border-${opp.signal === 'BUY' ? 'success' : 'danger'}">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${opp.symbol}</strong>
+                                    <br><small class="text-muted">
+                                        <i class="${assetIcon} me-1"></i>${opp.asset_type || 'Stock'}
+                                    </small>
+                                </div>
+                                <span class="badge bg-${opp.signal === 'BUY' ? 'success' : 'danger'}">
+                                    ${opp.signal}
+                                </span>
+                            </div>
+                            <small class="text-muted">$${opp.price?.toFixed(2) || 'N/A'}</small>
+                        </div>
+                    </div>
+                </div>`;
+        });
+        
+        html += `
+                    </div>
+                </div>
+            </div>`;
+    }
+    
+    // Öneriler bölümü
+    if (recommendations.length > 0) {
+        html += `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6><i class="fas fa-lightbulb me-1"></i>Günün Önerileri:</h6>
+                    <ul class="list-unstyled">`;
+        
+        recommendations.forEach(rec => {
+            html += `<li class="mb-1"><small>${rec}</small></li>`;
+        });
+        
+        html += `
+                    </ul>
+                </div>
+            </div>`;
+    }
+    
+    document.getElementById('briefing-content').innerHTML = html;
+}
+
+function getSentimentClass(score) {
+    if (score > 0.1) return 'text-success';
+    if (score < -0.1) return 'text-danger';
+    return 'text-warning';
+}
+
+// Market Movers Functions
+async function loadMarketMovers() {
+    try {
+        document.getElementById('movers-status').textContent = 'Yükleniyor...';
+        document.getElementById('movers-status').className = 'badge bg-warning text-dark ms-2';
+        
+        const response = await fetch('/api/market-movers');
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Market movers yüklenemedi');
+        }
+        
+        // Update content
+        displayMarketMovers(data);
+        
+        // Update status
+        document.getElementById('movers-status').textContent = 'Güncel';
+        document.getElementById('movers-status').className = 'badge bg-success ms-2';
+        
+        // Update timestamp
+        document.getElementById('movers-last-update').textContent = new Date().toLocaleString('tr-TR');
+        
+    } catch (error) {
+        console.error('Market movers error:', error);
+        document.getElementById('market-movers-content').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Market movers yüklenirken hata: ${error.message}
+            </div>`;
+        
+        document.getElementById('movers-status').textContent = 'Hata';
+        document.getElementById('movers-status').className = 'badge bg-danger ms-2';
+    }
+}
+
+function displayMarketMovers(data) {
+    const topGainers = data.top_gainers || [];
+    const topLosers = data.top_losers || [];
+    const mostActive = data.most_actively_traded || [];
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-4">
+                <h6 class="text-success">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    En Çok Yükselenler
+                </h6>
+                <div class="list-group list-group-flush">`;
+    
+    topGainers.slice(0, 5).forEach(stock => {
+        const changePercent = parseFloat(stock.change_percentage?.replace('%', '') || 0);
+        html += `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div>
+                    <strong>${stock.ticker}</strong>
+                    <br><small class="text-muted">$${parseFloat(stock.price || 0).toFixed(2)}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-success">+${changePercent.toFixed(2)}%</span>
+                    <br><small class="text-success">+$${parseFloat(stock.change_amount || 0).toFixed(2)}</small>
+                </div>
+            </div>`;
+    });
+    
+    html += `
+                </div>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-danger">
+                    <i class="fas fa-arrow-down me-1"></i>
+                    En Çok Düşenler
+                </h6>
+                <div class="list-group list-group-flush">`;
+    
+    topLosers.slice(0, 5).forEach(stock => {
+        const changePercent = parseFloat(stock.change_percentage?.replace('%', '') || 0);
+        html += `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div>
+                    <strong>${stock.ticker}</strong>
+                    <br><small class="text-muted">$${parseFloat(stock.price || 0).toFixed(2)}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-danger">${changePercent.toFixed(2)}%</span>
+                    <br><small class="text-danger">$${parseFloat(stock.change_amount || 0).toFixed(2)}</small>
+                </div>
+            </div>`;
+    });
+    
+    html += `
+                </div>
+            </div>
+            <div class="col-md-4">
+                <h6 class="text-primary">
+                    <i class="fas fa-fire me-1"></i>
+                    En Aktif İşlem Görenler
+                </h6>
+                <div class="list-group list-group-flush">`;
+    
+    mostActive.slice(0, 5).forEach(stock => {
+        const changePercent = parseFloat(stock.change_percentage?.replace('%', '') || 0);
+        const isPositive = changePercent >= 0;
+        html += `
+            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                <div>
+                    <strong>${stock.ticker}</strong>
+                    <br><small class="text-muted">$${parseFloat(stock.price || 0).toFixed(2)}</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-${isPositive ? 'success' : 'danger'}">
+                        ${isPositive ? '+' : ''}${changePercent.toFixed(2)}%
+                    </span>
+                    <br><small class="text-muted">Vol: ${formatVolume(stock.volume)}</small>
+                </div>
+            </div>`;
+    });
+    
+    html += `
+                </div>
+            </div>
+        </div>`;
+    
+    document.getElementById('market-movers-content').innerHTML = html;
+}
+
+function formatVolume(volume) {
+    const num = parseInt(volume || 0);
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+// Event listeners for briefing and market movers
+document.addEventListener('DOMContentLoaded', function() {
+    // Load briefing and market movers on page load
+    loadDailyBriefing();
+    loadMarketMovers();
+    
+    // Refresh briefing button
+    document.getElementById('refresh-briefing').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
+        
+        loadDailyBriefing().finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-sync me-1"></i>Yenile';
+        });
+    });
+    
+    // Refresh market movers button
+    document.getElementById('refresh-movers').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
+        
+        loadMarketMovers().finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-sync me-1"></i>Yenile';
+        });
+    });
 });
 </script>
 {% endblock %} 
