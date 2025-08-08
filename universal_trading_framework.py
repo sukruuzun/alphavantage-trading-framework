@@ -87,8 +87,8 @@ class TechnicalAnalyzer:
             return df
     
     def generate_signal(self, df: pd.DataFrame) -> Signal:
-        """Teknik analiz sinyali üretir"""
-        if len(df) < 200:
+        """Teknik analiz sinyali üretir - İyileştirilmiş threshold'lar"""
+        if len(df) < 50:  # 200'den 50'ye düşürdük - daha az veri ile çalışır
             return Signal.HOLD
             
         latest = df.iloc[-1]
@@ -96,44 +96,87 @@ class TechnicalAnalyzer:
         
         signals = []
         
-        # EMA trend sinyali
-        if latest['EMA_5'] > latest['EMA_13'] > latest['EMA_50']:
-            signals.append(1)  # Yükseliş trendi
-        elif latest['EMA_5'] < latest['EMA_13'] < latest['EMA_50']:
-            signals.append(-1)  # Düşüş trendi
-        else:
+        # EMA trend sinyali - Daha esnek kontrol
+        try:
+            if pd.notna(latest['EMA_5']) and pd.notna(latest['EMA_13']) and pd.notna(latest['EMA_50']):
+                if latest['EMA_5'] > latest['EMA_13'] > latest['EMA_50']:
+                    signals.append(1)  # Yükseliş trendi
+                elif latest['EMA_5'] < latest['EMA_13'] < latest['EMA_50']:
+                    signals.append(-1)  # Düşüş trendi
+                elif latest['EMA_5'] > latest['EMA_13']:  # Kısa vadeli pozitif
+                    signals.append(0.5)  # Zayıf yükseliş
+                elif latest['EMA_5'] < latest['EMA_13']:  # Kısa vadeli negatif  
+                    signals.append(-0.5)  # Zayıf düşüş
+                else:
+                    signals.append(0)
+            else:
+                signals.append(0)  # NaN değerler varsa nötr
+        except (KeyError, IndexError):
+            signals.append(0)  # Hata durumunda nötr
+        
+        # MACD sinyali - Güvenli kontrol
+        try:
+            if (pd.notna(latest['MACD']) and pd.notna(latest['MACD_Signal']) and 
+                pd.notna(prev['MACD']) and pd.notna(prev['MACD_Signal'])):
+                if latest['MACD'] > latest['MACD_Signal'] and prev['MACD'] <= prev['MACD_Signal']:
+                    signals.append(1)  # MACD golden cross
+                elif latest['MACD'] < latest['MACD_Signal'] and prev['MACD'] >= prev['MACD_Signal']:
+                    signals.append(-1)  # MACD death cross
+                elif latest['MACD'] > latest['MACD_Signal']:
+                    signals.append(0.3)  # MACD pozitif ama cross yok
+                elif latest['MACD'] < latest['MACD_Signal']:
+                    signals.append(-0.3)  # MACD negatif ama cross yok
+                else:
+                    signals.append(0)
+            else:
+                signals.append(0)  # NaN değerler varsa nötr
+        except (KeyError, IndexError):
+            signals.append(0)  # Hata durumunda nötr
+        
+        # RSI sinyali - Güvenli ve daha hassas
+        try:
+            if pd.notna(latest['RSI']):
+                if latest['RSI'] < 30:
+                    signals.append(1)  # Aşırı satım - güçlü alım
+                elif latest['RSI'] > 70:
+                    signals.append(-1)  # Aşırı alım - güçlü satım
+                elif latest['RSI'] < 40:
+                    signals.append(0.5)  # Zayıf alım bölgesi
+                elif latest['RSI'] > 60:
+                    signals.append(-0.5)  # Zayıf satım bölgesi
+                else:
+                    signals.append(0)  # Nötr bölge
+            else:
+                signals.append(0)
+        except (KeyError, IndexError):
             signals.append(0)
         
-        # MACD sinyali
-        if latest['MACD'] > latest['MACD_Signal'] and prev['MACD'] <= prev['MACD_Signal']:
-            signals.append(1)  # MACD golden cross
-        elif latest['MACD'] < latest['MACD_Signal'] and prev['MACD'] >= prev['MACD_Signal']:
-            signals.append(-1)  # MACD death cross
-        else:
+        # Bollinger Bantları sinyali - Güvenli kontrol
+        try:
+            if (pd.notna(latest['Close']) and pd.notna(latest['BB_Lower']) and 
+                pd.notna(latest['BB_Upper']) and pd.notna(latest['BB_Middle'])):
+                if latest['Close'] < latest['BB_Lower']:
+                    signals.append(1)  # Alt banda yakın - alım fırsatı
+                elif latest['Close'] > latest['BB_Upper']:
+                    signals.append(-1)  # Üst banda yakın - satım fırsatı
+                elif latest['Close'] < latest['BB_Middle']:
+                    signals.append(0.2)  # Orta bandin altında - zayıf alım
+                elif latest['Close'] > latest['BB_Middle']:
+                    signals.append(-0.2)  # Orta bandin üstünde - zayıf satım
+                else:
+                    signals.append(0)
+            else:
+                signals.append(0)
+        except (KeyError, IndexError):
             signals.append(0)
         
-        # RSI sinyali
-        if latest['RSI'] < 30:
-            signals.append(1)  # Aşırı satım
-        elif latest['RSI'] > 70:
-            signals.append(-1)  # Aşırı alım
-        else:
-            signals.append(0)
-        
-        # Bollinger Bantları sinyali
-        if latest['Close'] < latest['BB_Lower']:
-            signals.append(1)  # Alt banda yakın
-        elif latest['Close'] > latest['BB_Upper']:
-            signals.append(-1)  # Üst banda yakın
-        else:
-            signals.append(0)
-        
-        # Sinyal birleştirme
+        # Sinyal birleştirme - Çok daha hassas threshold'lar
         total_signal = sum(signals)
         
-        if total_signal >= 2:
+        # Çok hassas sinyal üretimi - gerçek trading için optimize edildi
+        if total_signal >= 0.3:  # 0.8'den 0.3'e düşürdük - çok daha kolay BUY
             return Signal.BUY
-        elif total_signal <= -2:
+        elif total_signal <= -0.3:  # -0.8'den -0.3'e düşürdük - çok daha kolay SELL
             return Signal.SELL
         else:
             return Signal.HOLD
@@ -364,9 +407,8 @@ class UniversalTradingBot:
             self.logger.warning("❌ Uzun vadeli teknik veri yok - Analiz yapılamıyor")
             return None  # Veri yoksa None döndür
             
-        # Uzun vadeli trend HOLD ise (kararsız piyasa)
-        if tech_long == Signal.HOLD:
-            return Signal.HOLD
+        # Uzun vadeli trend HOLD ise diğer sinyalleri de değerlendir (daha esnek)
+        # Sadece uzun vadeli HOLD'a bakarak karar vermeyelim
             
         # Geçerli sinyal sayısı yetersizse
         if len(valid_signals) < 3:
@@ -384,19 +426,14 @@ class UniversalTradingBot:
         elif correlation == Signal.SELL:
             sell_count += correlation_weight
         
-        # Final karar - Geçerli sinyal oranına göre threshold ayarla
+        # Final karar - Çok daha esnek threshold'lar
         total_valid = len(valid_signals)
-        buy_threshold = max(2, total_valid * 0.6)  # En az %60 veya 2 sinyal
-        sell_threshold = max(2, total_valid * 0.6)
         
-        if buy_count >= buy_threshold and tech_long == Signal.BUY:
+        # Basit çoğunluk kuralı - uzun vadeli teknik analiz şartı kaldırıldı
+        if buy_count >= sell_count and buy_count >= 1:  # En az 1 BUY sinyali yeterli
             return Signal.BUY
-        elif sell_count >= sell_threshold and tech_long == Signal.SELL:
+        elif sell_count > buy_count and sell_count >= 1:  # En az 1 SELL sinyali yeterli
             return Signal.SELL
-        elif buy_count >= 2.5 and tech_long == Signal.BUY and correlation == Signal.BUY:
-            return Signal.BUY  # Korelasyon desteğiyle
-        elif sell_count >= 2.5 and tech_long == Signal.SELL and correlation == Signal.SELL:
-            return Signal.SELL  # Korelasyon desteğiyle
         else:
             return Signal.HOLD
     
@@ -503,12 +540,17 @@ class MockDataProvider(DataProvider):
         data = []
         
         for i, date in enumerate(dates):
-            change = np.random.normal(0, 0.002)  # %0.2 volatilite
+            # Daha gerçekçi volatilite - %1-2 arası
+            change = np.random.normal(0, 0.015)  # %1.5 volatilite (0.002'den 0.015'e)
             price *= (1 + change)
             
-            high = price * (1 + abs(np.random.normal(0, 0.001)))
-            low = price * (1 - abs(np.random.normal(0, 0.001)))
-            volume = np.random.randint(100, 1000)
+            # Daha gerçekçi high/low spread
+            high_change = abs(np.random.normal(0, 0.008))  # %0.8 high spread
+            low_change = abs(np.random.normal(0, 0.008))   # %0.8 low spread
+            
+            high = price * (1 + high_change)
+            low = price * (1 - low_change)
+            volume = np.random.randint(1000, 10000)  # Daha yüksek volume
             
             data.append({
                 'Open': price,

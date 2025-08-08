@@ -394,8 +394,8 @@ async function showNews(symbol) {
                         <div class="card-body py-2">
                             <h6 class="card-title h6">${news.title}</h6>
                             <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">${new Date(news.time_published).toLocaleDateString('tr-TR')}</small>
-                                <small>Sentiment: ${formatSentiment(news.overall_sentiment_score)}</small>
+                                <small class="text-muted">${formatAlphaVantageDate(news.time_published)}</small>
+                                <small>Sentiment: ${formatSentiment(news.sentiment_score || news.overall_sentiment_score)}</small>
                             </div>
                         </div>
                     </div>`;
