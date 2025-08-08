@@ -14,8 +14,8 @@ from web_app import app, db, User, Watchlist, CachedData, CorrelationCache, Asse
 from alphavantage_provider import AlphaVantageProvider
 from universal_trading_framework import UniversalTradingBot, AssetType
 
-# Import correlation config only (not AVAILABLE_ASSETS - using database now)
-from constants import CORRELATION_CONFIG
+# Import configurations
+from constants import CORRELATION_CONFIG, API_CONFIG
 
 # Additional imports for correlation calculation
 import pandas as pd
@@ -41,9 +41,9 @@ def get_active_symbols_from_db():
     """Veritabanından aktif olan tüm varlık sembollerini çeker"""
     with app.app_context():
         try:
-            # Asset tablosundan aktif varlıkları çek
+            # Asset tablosundan aktif varlıkları çek (web_app.py ile tutarlı naming)
             forex_assets = [a.symbol for a in Asset.query.filter_by(asset_type='forex', is_active=True).all()]
-            stock_assets = [a.symbol for a in Asset.query.filter_by(asset_type='stock', is_active=True).all()]  
+            stock_assets = [a.symbol for a in Asset.query.filter_by(asset_type='stocks', is_active=True).all()]  
             crypto_assets = [a.symbol for a in Asset.query.filter_by(asset_type='crypto', is_active=True).all()]
             
             logger.info(f"📊 Database'den çekilen varlıklar:")
@@ -213,14 +213,18 @@ def update_data_for_all_users():
 
             successful_updates = 0
             
+            # OPTIMIZASYON: Bulk asset info loading (N+1 query problemi çözümü)
+            asset_info_cache = {}
+            with app.app_context():
+                all_assets = Asset.query.filter(Asset.symbol.in_(unique_symbols), Asset.is_active == True).all()
+                asset_info_cache = {asset.symbol: asset for asset in all_assets}
+            
             for symbol in unique_symbols:
                 try:
                     logger.info(f"🔄 {symbol} verisi güncelleniyor...")
                     
-                    # AKILLI FİLTRELEME: Asset type kontrolü (ETF'leri ve desteklenmeyen varlıkları atla)
-                    asset_info = None
-                    with app.app_context():
-                        asset_info = Asset.query.filter_by(symbol=symbol, is_active=True).first()
+                    # AKILLI FİLTRELEME: Asset type kontrolü (Cache'den al)
+                    asset_info = asset_info_cache.get(symbol)
                     
                     # Eğer varlık veritabanında yok veya desteklenmeyen türde ise, atla
                     if not asset_info:
@@ -256,7 +260,7 @@ def update_data_for_all_users():
                         except:
                             sentiment_score = 0
 
-                    # Database cache'e kaydet
+                    # Database cache'e kaydet (Batch operation için prepare)
                     cached_data = CachedData.query.filter_by(symbol=symbol).first()
                     if cached_data:
                         # Mevcut kayıt varsa güncelle
@@ -280,11 +284,13 @@ def update_data_for_all_users():
                     logger.info(f"✅ {symbol}: ${price} | {analysis.get('final_signal', 'N/A')}")
                     successful_updates += 1
                     
-                    # Database'e commit
-                    db.session.commit()
+                    # OPTIMIZASYON: Batch commit (configurable size)
+                    if successful_updates % API_CONFIG['batch_commit_size'] == 0:
+                        db.session.commit()
+                        logger.debug(f"📊 Batch commit: {successful_updates} güncelleme")
                     
-                    # Rate limiting
-                    time.sleep(2)
+                    # Rate limiting (configurable)
+                    time.sleep(API_CONFIG['rate_limit_sleep'])
                     
                 except Exception as e:
                     error_message = str(e)
@@ -313,10 +319,16 @@ def update_data_for_all_users():
                         logger.error(f"❌ Database error for {symbol}: {db_error}")
                         db.session.rollback()
 
+            # Final commit for remaining records
+            if successful_updates > 0:
+                db.session.commit()
+                logger.debug("📊 Final commit completed")
+            
             logger.info(f"✅ Veri güncelleme tamamlandı: {successful_updates}/{len(unique_symbols)} başarılı")
             
         except Exception as e:
             logger.error(f"❌ Genel güncelleme hatası: {e}")
+            db.session.rollback()  # Rollback on error
 
 def main():
     """Ana worker döngüsü"""
@@ -353,10 +365,11 @@ def main():
                 else:
                     logger.error("❌ SYSTEM_ALPHA_VANTAGE_KEY bulunamadı - korelasyon güncellenemiyor")
             
-            # Normal veri güncelleme (her 5 dakika)
+            # Normal veri güncelleme (configurable interval)
             update_data_for_all_users()
-            logger.info("🕒 Sonraki güncelleme için 5 dakika bekleniyor...")
-            time.sleep(300)  # 5 dakika
+            sleep_minutes = API_CONFIG['worker_sleep_interval'] // 60
+            logger.info(f"🕒 Sonraki güncelleme için {sleep_minutes} dakika bekleniyor...")
+            time.sleep(API_CONFIG['worker_sleep_interval'])
             
         except KeyboardInterrupt:
             logger.info("👋 Background Worker durduruluyor...")

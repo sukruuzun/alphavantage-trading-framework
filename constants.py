@@ -18,10 +18,10 @@ AVAILABLE_ASSETS = {
         'JNJ', 'PFE', 'ABBV', 'MRK', 'UNH', 'CVS',   # Healthcare  
         'KO', 'PEP', 'WMT', 'HD', 'MCD', 'DIS',      # Consumer
         'XOM', 'CVX', 'COP', 'SLB',                   # Energy
-        'V', 'MA', 'PYPL', 'SQ',                      # Fintech
+        'V', 'MA', 'PYPL',                          # Fintech
         
         # Tier 3: Popular Growth Stocks  
-        'ABNB', 'UBER', 'LYFT', 'SNAP', 'TWTR', 'ZM', 'ROKU',
+        'ABNB', 'UBER', 'LYFT', 'SNAP', 'ZM', 'ROKU',
         'SNOW', 'PLTR', 'COIN', 'RBLX', 'CRWD', 'NET', 'DDOG',
         
         # Tier 4: ETFs (broad market exposure)
@@ -39,4 +39,22 @@ CORRELATION_CONFIG = {
     'min_data_points': 50,        # Minimum veri noktası
     'timeframe': '15m',           # 15 dakikalık periyot
     'correlation_threshold': 0.3  # Minimum anlamlı korelasyon
+}
+
+# API ve Worker konfigürasyonu
+API_CONFIG = {
+    'timeout': 20,                # API request timeout (seconds)
+    'max_retries': 3,            # Maximum retry attempts
+    'rate_limit_sleep': 1.5,     # Sleep between rate limited requests
+    'batch_commit_size': 10,     # Database batch commit size
+    'max_cache_size': 1000,      # Maximum cache entries
+    'worker_sleep_interval': 300  # Worker sleep interval (5 minutes)
+}
+
+# Signal thresholds
+SIGNAL_CONFIG = {
+    'buy_threshold': 2,           # Minimum signals for BUY
+    'sell_threshold': 2,          # Minimum signals for SELL
+    'correlation_weight': 0.5,    # Correlation signal weight
+    'sentiment_threshold': 0.3    # Sentiment signal threshold
 } 

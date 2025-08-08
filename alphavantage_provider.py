@@ -72,6 +72,7 @@ class AlphaVantageProvider(DataProvider):
         # Cache sistemi - Plan tipine göre ayarla
         self.use_cache = use_cache
         self.cache = {}
+        self.max_cache_size = 1000  # Maximum cache entries to prevent memory leaks
         
         if self.is_premium:
             self.cache_duration = 60  # Premium: 1 dakika cache (daha sık güncelleme)
@@ -133,7 +134,7 @@ class AlphaVantageProvider(DataProvider):
                             'name': asset.name,
                             'exchange': asset.exchange
                         }
-                elif asset.asset_type == 'stock':
+                elif asset.asset_type in ['stock', 'stocks']:  # Support both formats for compatibility
                     return {
                         'symbol': symbol,
                         'name': asset.name,
@@ -168,17 +169,41 @@ class AlphaVantageProvider(DataProvider):
             if sleep_time > 0.1:  # Sadece 100ms'den fazla beklemeler için log
                 plan_type = "Premium" if self.is_premium else "Free"
                 self.logger.debug(f"⏱️ {plan_type} rate limit - {sleep_time:.1f}s bekleniyor...")
+            
+            # Maximum sleep time protection (avoid infinite waits)
+            sleep_time = min(sleep_time, 30.0)  # Max 30 seconds wait
             time.sleep(sleep_time)
             
         self.last_call_time = time.time()
         
     def _get_cache_key(self, data_type: str, symbols: str = 'global') -> str:
-        """Cache anahtarı"""
-        return f"{data_type}_{symbols}_{int(time.time() / self.cache_duration)}"
+        """Cache anahtarı - Collision-resistant format"""
+        timestamp_bucket = int(time.time() / self.cache_duration)
+        # Add API key hash to prevent cross-account cache pollution
+        api_hash = hash(self.api_key) % 10000 if self.api_key else 0
+        return f"{data_type}_{symbols}_{timestamp_bucket}_{api_hash}"
         
     def _is_cache_valid(self, key: str) -> bool:
         """Cache geçerli mi"""
         return key in self.cache and time.time() - self.cache[key]['timestamp'] < self.cache_duration
+    
+    def _cleanup_cache(self):
+        """Cache cleanup to prevent memory leaks"""
+        if len(self.cache) > self.max_cache_size:
+            current_time = time.time()
+            # Remove expired entries first
+            expired_keys = [k for k, v in self.cache.items() 
+                          if current_time - v['timestamp'] > self.cache_duration]
+            for key in expired_keys:
+                del self.cache[key]
+            
+            # If still too many entries, remove oldest ones
+            if len(self.cache) > self.max_cache_size:
+                sorted_items = sorted(self.cache.items(), key=lambda x: x[1]['timestamp'])
+                excess_count = len(self.cache) - self.max_cache_size + 100  # Keep some buffer
+                for key, _ in sorted_items[:excess_count]:
+                    del self.cache[key]
+                self.logger.debug(f"🧹 Cache cleanup: Removed {excess_count} old entries")
         
     def get_current_price(self, symbol: str) -> float:
         """Güncel fiyat al - Premium real-time (Database-driven)"""
@@ -218,6 +243,7 @@ class AlphaVantageProvider(DataProvider):
                 
             # Cache'e kaydet
             if self.use_cache:
+                self._cleanup_cache()  # Prevent memory leaks
                 self.cache[cache_key] = {
                     'data': price,
                     'timestamp': time.time()
@@ -226,6 +252,15 @@ class AlphaVantageProvider(DataProvider):
             self.logger.debug(f"💰 {symbol}: {price}")
             return price
             
+        except requests.exceptions.Timeout:
+            self.logger.error(f"❌ {symbol} fiyat hatası: API timeout")
+            raise ValueError(f"API timeout for {symbol}")
+        except requests.exceptions.ConnectionError:
+            self.logger.error(f"❌ {symbol} fiyat hatası: Network connection error")
+            raise ValueError(f"Network error for {symbol}")
+        except KeyError as e:
+            self.logger.error(f"❌ {symbol} fiyat hatası: API response format error - {e}")
+            raise ValueError(f"Invalid API response format for {symbol}")
         except Exception as e:
             self.logger.error(f"❌ {symbol} fiyat hatası: {e}")
             raise

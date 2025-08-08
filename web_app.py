@@ -16,9 +16,7 @@ import json
 import logging
 import os
 
-# Import our existing framework - LAZY LOADING for Railway
-# from alphavantage_provider import AlphaVantageProvider
-# from universal_trading_framework import UniversalTradingBot, AssetType
+# Framework imports moved to lazy loading sections for Railway optimization
 
 # Import centralized constants
 from constants import AVAILABLE_ASSETS
