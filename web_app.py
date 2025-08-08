@@ -216,10 +216,10 @@ def dashboard():
     # Get user's watchlist
     watchlist_items = Watchlist.query.filter_by(user_id=current_user.id).all()
     
-    # Group by asset type
+    # Group by asset type (match database asset_type values)
     user_watchlist = {
         'forex': [item.symbol for item in watchlist_items if item.asset_type == 'forex'],
-        'stocks': [item.symbol for item in watchlist_items if item.asset_type == 'stocks'],
+        'stocks': [item.symbol for item in watchlist_items if item.asset_type in ['stock', 'stocks']],  # Support both
         'crypto': [item.symbol for item in watchlist_items if item.asset_type == 'crypto']
     }
     
@@ -244,7 +244,7 @@ def manage_watchlist():
             db.session.add(item)
             
         for symbol in form.stock_symbols.data:
-            item = Watchlist(user_id=current_user.id, asset_type='stocks', symbol=symbol)
+            item = Watchlist(user_id=current_user.id, asset_type='stock', symbol=symbol)  # Use 'stock' to match Asset table
             db.session.add(item)
             
         for symbol in form.crypto_symbols.data:
@@ -258,7 +258,7 @@ def manage_watchlist():
     # Pre-populate form with current selections
     current_watchlist = Watchlist.query.filter_by(user_id=current_user.id).all()
     form.forex_symbols.data = [item.symbol for item in current_watchlist if item.asset_type == 'forex']
-    form.stock_symbols.data = [item.symbol for item in current_watchlist if item.asset_type == 'stocks']
+    form.stock_symbols.data = [item.symbol for item in current_watchlist if item.asset_type in ['stock', 'stocks']]  # Support both
     form.crypto_symbols.data = [item.symbol for item in current_watchlist if item.asset_type == 'crypto']
     
     return render_template('watchlist.html', form=form)
@@ -295,7 +295,9 @@ def live_data():
                     'last_updated': cached_data.last_updated.strftime('%H:%M:%S') if cached_data.last_updated else 'N/A',
                     'error': cached_data.error_message
                 }
-                results[asset_type].append(result_item)
+                # Map 'stock' to 'stocks' for frontend compatibility
+                frontend_asset_type = 'stocks' if asset_type == 'stock' else asset_type
+                results[frontend_asset_type].append(result_item)
             else:
                 # Database'de yoksa placeholder
                 result_item = {
@@ -306,7 +308,9 @@ def live_data():
                     'last_updated': 'Worker güncelliyor...',
                     'error': None
                 }
-                results[asset_type].append(result_item)
+                # Map 'stock' to 'stocks' for frontend compatibility
+                frontend_asset_type = 'stocks' if asset_type == 'stock' else asset_type
+                results[frontend_asset_type].append(result_item)
         
         return jsonify(results)
         

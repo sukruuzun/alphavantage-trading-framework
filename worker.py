@@ -41,9 +41,9 @@ def get_active_symbols_from_db():
     """Veritabanından aktif olan tüm varlık sembollerini çeker"""
     with app.app_context():
         try:
-            # Asset tablosundan aktif varlıkları çek (web_app.py ile tutarlı naming)
+            # Asset tablosundan aktif varlıkları çek (populate_assets.py ile tutarlı naming)
             forex_assets = [a.symbol for a in Asset.query.filter_by(asset_type='forex', is_active=True).all()]
-            stock_assets = [a.symbol for a in Asset.query.filter_by(asset_type='stocks', is_active=True).all()]  
+            stock_assets = [a.symbol for a in Asset.query.filter_by(asset_type='stock', is_active=True).all()]  # FIX: 'stock' not 'stocks'
             crypto_assets = [a.symbol for a in Asset.query.filter_by(asset_type='crypto', is_active=True).all()]
             
             logger.info(f"📊 Database'den çekilen varlıklar:")
@@ -62,7 +62,7 @@ def get_active_symbols_from_db():
             
             return {
                 'forex': forex_assets,
-                'stocks': stock_assets,
+                'stocks': stock_assets,  # Keep 'stocks' key for compatibility with other parts
                 'crypto': crypto_assets
             }
         except Exception as e:
