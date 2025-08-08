@@ -95,11 +95,10 @@
             </div>
             <div class="card-footer text-muted">
                 <small>
-                    <i class="fas fa-clock me-1"></i>
-                    Son güncelleme: <span id="briefing-last-update">-</span>
-                    <button class="btn btn-outline-primary btn-sm float-end" id="refresh-briefing">
-                        <i class="fas fa-sync me-1"></i>Yenile
-                    </button>
+                    <i class="fas fa-robot me-1"></i>
+                    Worker tarafından saatlik güncellenir
+                    <span class="badge bg-info ms-2">Otomatik</span>
+                    <small class="float-end">Son: <span id="briefing-last-update">-</span></small>
                 </small>
             </div>
         </div>
@@ -125,11 +124,10 @@
             </div>
             <div class="card-footer text-muted">
                 <small>
-                    <i class="fas fa-clock me-1"></i>
-                    Son güncelleme: <span id="movers-last-update">-</span>
-                    <button class="btn btn-outline-success btn-sm float-end" id="refresh-movers">
-                        <i class="fas fa-sync me-1"></i>Yenile
-                    </button>
+                    <i class="fas fa-robot me-1"></i>
+                    Worker tarafından saatlik güncellenir  
+                    <span class="badge bg-info ms-2">Otomatik</span>
+                    <small class="float-end">Son: <span id="movers-last-update">-</span></small>
                 </small>
             </div>
         </div>
@@ -838,31 +836,12 @@ function formatVolume(volume) {
 
 // Event listeners for briefing and market movers
 document.addEventListener('DOMContentLoaded', function() {
-    // Load briefing and market movers on page load
+    // Load briefing and market movers on page load - Cache'den hızlı servis
     loadDailyBriefing();
     loadMarketMovers();
     
-    // Refresh briefing button
-    document.getElementById('refresh-briefing').addEventListener('click', function() {
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
-        
-        loadDailyBriefing().finally(() => {
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-sync me-1"></i>Yenile';
-        });
-    });
-    
-    // Refresh market movers button
-    document.getElementById('refresh-movers').addEventListener('click', function() {
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
-        
-        loadMarketMovers().finally(() => {
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-sync me-1"></i>Yenile';
-        });
-    });
+    // Artık manuel yenileme butonu yok - Worker otomatik günceller
+    console.log('📊 Dashboard yüklendi - Cache\'den veri servisi aktif');
 });
 </script>
 {% endblock %} 

@@ -117,6 +117,62 @@ class Asset(db.Model):
     def __repr__(self):
         return f'<Asset {self.symbol}: {self.name} ({self.exchange})>'
 
+class DailyBriefing(db.Model):
+    """Günlük piyasa brifingi - Worker tarafından saatlik güncellenir"""
+    __tablename__ = 'daily_briefings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    briefing_date = db.Column(db.Date, nullable=False, index=True)
+    briefing_hour = db.Column(db.Integer, nullable=False)  # 0-23 arası saat
+    
+    # Global sentiment
+    global_sentiment_score = db.Column(db.Float, default=0.0)
+    global_sentiment_status = db.Column(db.String(20), default='Nötr')
+    news_count = db.Column(db.Integer, default=0)
+    
+    # Market summary
+    total_analyzed = db.Column(db.Integer, default=0)
+    buy_signals_count = db.Column(db.Integer, default=0)
+    sell_signals_count = db.Column(db.Integer, default=0)
+    
+    # Top opportunities (JSON format)
+    top_opportunities = db.Column(db.Text, nullable=True)  # JSON string
+    recommendations = db.Column(db.Text, nullable=True)    # JSON string
+    
+    # Market movers data (JSON format) 
+    market_movers_data = db.Column(db.Text, nullable=True)  # JSON string
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Unique constraint: Günde sadece bir briefing per hour
+    __table_args__ = (db.UniqueConstraint('briefing_date', 'briefing_hour', name='_daily_briefing_uc'),)
+    
+    def to_dict(self):
+        import json
+        return {
+            'briefing_date': self.briefing_date.isoformat() if self.briefing_date else None,
+            'briefing_hour': self.briefing_hour,
+            'global_sentiment': {
+                'overall_score': self.global_sentiment_score,
+                'status': self.global_sentiment_status,
+                'news_count': self.news_count
+            },
+            'market_summary': {
+                'total_symbols_in_system': 73,  # Constants'dan
+                'analyzed_symbols': self.total_analyzed,
+                'opportunities_found': len(json.loads(self.top_opportunities)) if self.top_opportunities else 0,
+                'buy_signals': self.buy_signals_count,
+                'sell_signals': self.sell_signals_count,
+                'market_mood': self.global_sentiment_status
+            },
+            'top_opportunities': json.loads(self.top_opportunities) if self.top_opportunities else [],
+            'recommendations': json.loads(self.recommendations) if self.recommendations else [],
+            'market_movers': json.loads(self.market_movers_data) if self.market_movers_data else {},
+            'timestamp': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -321,21 +377,52 @@ def live_data():
 @app.route('/api/market-movers')
 @login_required
 def get_market_movers():
-    """📈 Market Movers - Top Gainers & Losers (Premium Feature)"""
+    """📈 Market Movers - Cache'den Hızlı Servis"""
     try:
-        from alpha_intelligence_provider import AlphaIntelligenceProvider
+        from datetime import date
         
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
-        if not system_api_key:
-            return jsonify({'error': 'API anahtarı bulunamadı (SYSTEM_ALPHA_VANTAGE_KEY veya ALPHA_VANTAGE_KEY)'}), 500
+        current_date = date.today()
+        current_hour = datetime.now().hour
         
-        provider = AlphaIntelligenceProvider(api_key=system_api_key, is_premium=True)
-        market_data = provider.get_top_gainers_losers()
+        # En son briefing'den market movers verisini al
+        latest_briefing = DailyBriefing.query.filter_by(
+            briefing_date=current_date
+        ).order_by(DailyBriefing.briefing_hour.desc()).first()
         
-        return jsonify(market_data)
+        # Bugün yoksa dünkü son briefing'i al
+        if not latest_briefing:
+            from datetime import timedelta
+            yesterday = current_date - timedelta(days=1)
+            latest_briefing = DailyBriefing.query.filter_by(
+                briefing_date=yesterday
+            ).order_by(DailyBriefing.briefing_hour.desc()).first()
+        
+        if latest_briefing:
+            import json
+            market_movers = json.loads(latest_briefing.market_movers_data) if latest_briefing.market_movers_data else {}
+            
+            if market_movers:
+                logging.info(f"✅ Cache'den market movers servis edildi: {latest_briefing.briefing_date} {latest_briefing.briefing_hour}:00")
+                return jsonify(market_movers)
+            else:
+                return jsonify({
+                    'error': 'Market movers verisi henüz hazır değil',
+                    'message': 'Worker tarafından güncelleniyor',
+                    'top_gainers': [],
+                    'top_losers': [],
+                    'most_actively_traded': []
+                })
+        else:
+            return jsonify({
+                'error': 'Henüz market movers verisi yok',
+                'message': 'İlk briefing oluşturulduğunda veriler gelecek',
+                'top_gainers': [],
+                'top_losers': [],
+                'most_actively_traded': []
+            })
         
     except Exception as e:
-        logging.error(f"Market movers error: {e}")
+        logging.error(f"Market movers cache error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/insider/<symbol>')
@@ -453,153 +540,52 @@ def test_api_key():
 @app.route('/api/daily-briefing')
 @login_required
 def get_daily_briefing():
-    """🎯 Günlük Piyasa Brifingi API Endpoint"""
+    """🎯 Günlük Piyasa Brifingi - Cache'den Hızlı Servis"""
     try:
-        system_api_key = os.environ.get('SYSTEM_ALPHA_VANTAGE_KEY') or os.environ.get('ALPHA_VANTAGE_KEY')
-        if not system_api_key:
-            return jsonify({'error': 'API anahtarı bulunamadı'}), 500
-            
-        # AlphaVantage provider ile briefing oluştur
-        from alphavantage_provider import AlphaVantageProvider
-        from universal_trading_framework import UniversalTradingBot, AssetType
-        from datetime import datetime
-        import time
+        from datetime import date
         
-        provider = AlphaVantageProvider(system_api_key, is_premium=True)
-        framework = UniversalTradingBot(provider, AssetType.STOCKS)
+        current_date = date.today()
+        current_hour = datetime.now().hour
         
-        # Briefing verilerini topla
-        briefing_data = {
-            'timestamp': datetime.now().isoformat(),
-            'global_sentiment': None,
-            'top_opportunities': [],
-            'market_summary': {},
-            'recommendations': [],
-            'risk_analysis': {}
-        }
+        # Önce bu saatteki briefing'i ara
+        current_briefing = DailyBriefing.query.filter_by(
+            briefing_date=current_date,
+            briefing_hour=current_hour
+        ).first()
         
-        # 1. Global Sentiment
-        try:
-            sentiment_data = provider.get_news_sentiment(limit=50)
-            briefing_data['global_sentiment'] = {
-                'overall_score': sentiment_data.get('overall_sentiment', 0),
-                'news_count': sentiment_data.get('news_count', 0),
-                'status': 'Pozitif' if sentiment_data.get('overall_sentiment', 0) > 0.1 else 
-                         'Negatif' if sentiment_data.get('overall_sentiment', 0) < -0.1 else 'Nötr'
-            }
-        except Exception as e:
-            logging.warning(f"Global sentiment hatası: {e}")
-            briefing_data['global_sentiment'] = {'status': 'Veri yok', 'overall_score': 0}
+        # Bu saatte yoksa, bugünün en son briefing'ini al
+        if not current_briefing:
+            current_briefing = DailyBriefing.query.filter_by(
+                briefing_date=current_date
+            ).order_by(DailyBriefing.briefing_hour.desc()).first()
         
-        # 2. TÜM SİSTEM TARAMASI - Tüm asset'leri analiz et
-        try:
-            from constants import AVAILABLE_ASSETS
-            import random
-            
-            # Tüm sistemdeki enstrümanları topla
-            all_symbols = []
-            all_symbols.extend(AVAILABLE_ASSETS['stocks'])  # ~60 hisse
-            all_symbols.extend(AVAILABLE_ASSETS['forex'])   # 9 forex
-            all_symbols.extend(AVAILABLE_ASSETS['crypto'])  # 4 crypto
-            
-            # Performans için randomize et ve ilk 15-20'sini analiz et
-            random.shuffle(all_symbols)
-            symbols_to_analyze = all_symbols[:20]  # İlk 20 sembol (hız için)
-            
-            logging.info(f"📊 Günlük briefing: {len(symbols_to_analyze)} sembol analiz ediliyor...")
-            
-            analyzed_count = 0
-            for symbol in symbols_to_analyze:
-                try:
-                    analysis = framework.analyze_symbol(symbol)
-                    analyzed_count += 1
-                    
-                    # BUY/SELL sinyali varsa fırsat listesine ekle
-                    if analysis.get('final_signal') in ['buy', 'sell']:
-                        # Asset tipini belirle
-                        asset_type = 'Stock'
-                        if symbol in AVAILABLE_ASSETS['forex']:
-                            asset_type = 'Forex'
-                        elif symbol in AVAILABLE_ASSETS['crypto']:
-                            asset_type = 'Crypto'
-                            
-                        briefing_data['top_opportunities'].append({
-                            'symbol': symbol,
-                            'signal': analysis.get('final_signal', 'hold').upper(),
-                            'price': analysis.get('current_price', 0),
-                            'asset_type': asset_type,
-                            'confidence': 'Yüksek' if analysis.get('final_signal') != 'hold' else 'Düşük'
-                        })
-                        
-                        # En fazla 10 fırsat göster (UI için)
-                        if len(briefing_data['top_opportunities']) >= 10:
-                            break
-                            
-                except Exception as e:
-                    logging.warning(f"Sembol analiz hatası {symbol}: {e}")
-                    continue
-            
-            logging.info(f"✅ Günlük briefing tamamlandı: {analyzed_count} sembol, {len(briefing_data['top_opportunities'])} fırsat bulundu")
-                    
-        except Exception as e:
-            logging.warning(f"Sistem tarama hatası: {e}")
+        # Hiç briefing yoksa, dünkü son briefing'i al
+        if not current_briefing:
+            from datetime import timedelta
+            yesterday = current_date - timedelta(days=1)
+            current_briefing = DailyBriefing.query.filter_by(
+                briefing_date=yesterday
+            ).order_by(DailyBriefing.briefing_hour.desc()).first()
         
-        # 3. Market Summary
-        briefing_data['market_summary'] = {
-            'total_symbols_in_system': len(AVAILABLE_ASSETS['stocks']) + len(AVAILABLE_ASSETS['forex']) + len(AVAILABLE_ASSETS['crypto']),
-            'analyzed_symbols': analyzed_count if 'analyzed_count' in locals() else 0,
-            'opportunities_found': len(briefing_data['top_opportunities']),
-            'buy_signals': len([op for op in briefing_data['top_opportunities'] if op['signal'] == 'BUY']),
-            'sell_signals': len([op for op in briefing_data['top_opportunities'] if op['signal'] == 'SELL']),
-            'market_mood': briefing_data['global_sentiment']['status'],
-            'asset_breakdown': {
-                'stocks': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Stock']),
-                'forex': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Forex']),
-                'crypto': len([op for op in briefing_data['top_opportunities'] if op.get('asset_type') == 'Crypto'])
-            }
-        }
-        
-        # 4. Akıllı Öneriler - Sistem taraması sonuçlarına göre
-        sentiment_score = briefing_data['global_sentiment']['overall_score']
-        buy_count = briefing_data['market_summary']['buy_signals']
-        sell_count = briefing_data['market_summary']['sell_signals']
-        total_opportunities = briefing_data['market_summary']['opportunities_found']
-        analyzed = briefing_data['market_summary']['analyzed_symbols']
-        
-        # Ana strateji önerisi
-        if sentiment_score > 0.1 and buy_count > sell_count:
-            briefing_data['recommendations'].append("🟢 Pozitif piyasa sentiment - Alım fırsatlarını değerlendirin")
-        elif sentiment_score < -0.1 and sell_count > buy_count:
-            briefing_data['recommendations'].append("🔴 Negatif piyasa sentiment - Risk yönetimi yapın")
+        if current_briefing:
+            logging.info(f"✅ Cache'den briefing servis edildi: {current_briefing.briefing_date} {current_briefing.briefing_hour}:00")
+            return jsonify(current_briefing.to_dict())
         else:
-            briefing_data['recommendations'].append("🟡 Karışık sinyaller - Temkinli yaklaşın")
-        
-        # Fırsat yoğunluğu analizi
-        if total_opportunities == 0:
-            briefing_data['recommendations'].append("⏸️ Sistem taramasında net sinyal yok - Bekleyici pozisyon alın")
-        elif total_opportunities <= 2:
-            briefing_data['recommendations'].append("📊 Az sayıda fırsat - Seçici davranın")
-        elif total_opportunities >= 5:
-            briefing_data['recommendations'].append("🎯 Çok sayıda fırsat - Portföy çeşitliliği yapın")
-        
-        # Asset sınıfı önerileri
-        asset_breakdown = briefing_data['market_summary']['asset_breakdown']
-        if asset_breakdown['stocks'] > asset_breakdown['forex'] + asset_breakdown['crypto']:
-            briefing_data['recommendations'].append("📈 Hisse senetlerinde daha fazla aktivite")
-        elif asset_breakdown['forex'] > 0:
-            briefing_data['recommendations'].append("💱 Forex piyasasında hareket var")
-        elif asset_breakdown['crypto'] > 0:
-            briefing_data['recommendations'].append("₿ Kripto piyasasında fırsatlar mevcut")
-        
-        # Sistem kapsamı bilgisi
-        briefing_data['recommendations'].append(f"🔍 {analyzed} sembol analiz edildi (Sistem: {briefing_data['market_summary']['total_symbols_in_system']} enstrüman)")
-        
-        return jsonify(briefing_data)
+            # Hiç briefing yoksa fallback mesajı
+            return jsonify({
+                'error': 'Henüz briefing oluşturulmadı',
+                'message': 'Worker tarafından saatlik briefing oluşturuluyor. Lütfen birkaç dakika sonra tekrar deneyin.',
+                'global_sentiment': {'status': 'Bekliyor', 'overall_score': 0, 'news_count': 0},
+                'market_summary': {'analyzed_symbols': 0, 'buy_signals': 0, 'sell_signals': 0, 'market_mood': 'Bekliyor'},
+                'top_opportunities': [],
+                'recommendations': ['⏳ İlk briefing hazırlanıyor - Worker aktif olduğunda veriler gelecek'],
+                'timestamp': datetime.now().isoformat()
+            })
         
     except Exception as e:
-        logging.error(f"Daily briefing error: {e}")
+        logging.error(f"Daily briefing cache error: {e}")
         return jsonify({
-            'error': 'Günlük briefing oluşturulamadı',
+            'error': 'Briefing servisi geçici olarak kullanılamıyor',
             'details': str(e)
         }), 500
 
