@@ -48,7 +48,7 @@ API_CONFIG = {
     'rate_limit_sleep': 1.5,     # Sleep between rate limited requests
     'batch_commit_size': 10,     # Database batch commit size
     'max_cache_size': 1000,      # Maximum cache entries
-    'worker_sleep_interval': 300  # Worker sleep interval (5 minutes)
+    'worker_sleep_interval': 60   # Worker sleep interval (1 minute) - Hızlı test için
 }
 
 # Signal thresholds

@@ -252,12 +252,6 @@ def update_data_for_all_users():
     
     with app.app_context():
         try:
-            # Tüm kullanıcıları kontrol et (watchlist için gerekli)
-            users = User.query.all()
-            if not users:
-                logger.warning("❌ Hiç kullanıcı bulunamadı. Bekleniyor...")
-                return
-
             # Merkezi sistem API key kullan (fallback to ALPHA_VANTAGE_KEY)
             system_api_key = os.getenv('SYSTEM_ALPHA_VANTAGE_KEY') or os.getenv('ALPHA_VANTAGE_KEY')
             if not system_api_key:
@@ -429,7 +423,7 @@ def update_data_for_all_users():
 def main():
     """Ana worker döngüsü"""
     logger.info("🚀 Alpha Vantage Background Worker başlatıldı")
-    logger.info("📊 Her 5 dakikada veri güncellenecek")
+    logger.info("📊 Her 1 dakikada veri güncellenecek (hızlı test modu)")
     logger.info(f"📈 Her {CORRELATION_CONFIG['update_interval_hours']} saatte korelasyon güncellenecek")
     
     # Database tablolarını oluştur (gerekirse)
