@@ -228,15 +228,40 @@ class AlphaVantageProvider(DataProvider):
                 price = float(data['5. Exchange Rate'].iloc[0])
                 
             elif symbol_info['type'] == 'stock':
-                data, _ = self.ts.get_quote_endpoint(symbol=symbol_info['symbol'])
-                price = float(data['05. price'].iloc[0])
+                # 🚀 PREMIUM REAL-TIME: Use intraday 1min for latest price
+                if self.is_premium:
+                    # Premium: Real-time intraday data (1-minute interval)
+                    data, _ = self.ts.get_intraday(
+                        symbol=symbol_info['symbol'], 
+                        interval='1min', 
+                        outputsize='compact'  # Only last 100 data points
+                    )
+                    # Get the most recent price (first entry)
+                    latest_timestamp = data.index[0]
+                    price = float(data['4. close'].iloc[0])
+                else:
+                    # Free: Delayed quote endpoint (15-20 min delay)
+                    data, _ = self.ts.get_quote_endpoint(symbol=symbol_info['symbol'])
+                    price = float(data['05. price'].iloc[0])
                 
             elif symbol_info['type'] == 'crypto':
-                data, _ = self.crypto.get_digital_currency_exchange_rate(
-                    from_currency=symbol_info['symbol'],
-                    to_currency=symbol_info['market']
-                )
-                price = float(data['5. Exchange Rate'].iloc[0])
+                # 🚀 PREMIUM REAL-TIME: Use intraday 1min for crypto
+                if self.is_premium:
+                    # Premium: Real-time crypto intraday data (1-minute interval)
+                    data, _ = self.crypto.get_digital_currency_intraday(
+                        symbol=symbol_info['symbol'], 
+                        market=symbol_info['market'],
+                        interval='1min'
+                    )
+                    # Get the most recent price (first entry)
+                    price = float(data['4b. close (USD)'].iloc[0])
+                else:
+                    # Free: Exchange rate (may have delay)
+                    data, _ = self.crypto.get_digital_currency_exchange_rate(
+                        from_currency=symbol_info['symbol'],
+                        to_currency=symbol_info['market']
+                    )
+                    price = float(data['5. Exchange Rate'].iloc[0])
                 
             else:
                 raise ValueError(f"Bilinmeyen tip: {symbol_info['type']}")
@@ -249,7 +274,8 @@ class AlphaVantageProvider(DataProvider):
                     'timestamp': time.time()
                 }
                 
-            self.logger.debug(f"💰 {symbol}: {price}")
+            data_type = "real-time" if self.is_premium else "delayed"
+            self.logger.debug(f"💰 {symbol}: {price} ({data_type})")
             return price
             
         except requests.exceptions.Timeout:

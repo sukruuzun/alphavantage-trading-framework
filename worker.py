@@ -259,7 +259,7 @@ def update_data_for_all_users():
                 return
                 
             provider = AlphaVantageProvider(api_key=system_api_key, is_premium=True)
-            logger.info(f"🔑 Sistem API key kullanılıyor: {system_api_key[:8]}...")
+            logger.info(f"🔑 Sistem API key kullanılıyor: {system_api_key[:8]}... (Premium: Real-time data)")
 
             # Veritabanından aktif varlıkları çek (database-driven dynamic assets)
             available_assets = get_active_symbols_from_db()
@@ -371,7 +371,9 @@ def update_data_for_all_users():
                         )
                         db.session.add(cached_data)
                     
-                    logger.info(f"✅ {symbol}: ${price} | {analysis.get('final_signal', 'N/A')}")
+                    # Log with data type info
+                    data_type = "real-time" if provider.is_premium else "delayed"
+                    logger.info(f"✅ {symbol}: ${price} | {analysis.get('final_signal', 'N/A')} ({data_type})")
                     successful_updates += 1
                     
                     # OPTIMIZASYON: Batch commit (configurable size)
