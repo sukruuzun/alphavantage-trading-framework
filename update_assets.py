@@ -13,27 +13,7 @@ Listing_status.csv'den kaliteli varlıkları filtreler ve database'e kaydeder.
 import pandas as pd
 import os
 from datetime import datetime, timedelta
-from web_app import app, db, User, Watchlist, CachedData, CorrelationCache
-
-# Yeni Asset modeli için import
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-
-class Asset(db.Model):
-    """Filtrelenmiş yüksek kaliteli varlık listesi"""
-    __tablename__ = 'assets'
-    
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String(20), unique=True, nullable=False, index=True)
-    name = Column(String(200), nullable=False)
-    exchange = Column(String(50), nullable=False)
-    asset_type = Column(String(20), nullable=False)  # 'forex', 'stock', 'crypto'
-    ipo_date = Column(String(20), nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    def __repr__(self):
-        return f'<Asset {self.symbol}: {self.name} ({self.exchange})>'
+from web_app import app, db, User, Watchlist, CachedData, CorrelationCache, Asset
 
 def load_and_filter_assets():
     """listing_status.csv'den kaliteli varlıkları filtreler"""
